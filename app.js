@@ -487,8 +487,15 @@ ensureAdminExists();
 // Attractions: loaded from Firebase (or seeded from initialAttractions)
 let attractions = [];
 
+function getAttractionsSource() {
+    // On first cold start (e.g. Vercel serverless), Firebase may not have loaded yet.
+    // Fall back to the static initialAttractions so pages never render empty.
+    if (Array.isArray(attractions) && attractions.length > 0) return attractions;
+    return initialAttractions;
+}
+
 function getActiveAttractions() {
-    return attractions.filter(a => a.active !== false);
+    return getAttractionsSource().filter(a => a.active !== false);
 }
 
 /** Remove undefined values recursively (Firebase rejects undefined). */
@@ -1227,7 +1234,7 @@ app.get('/map', (req, res) => {
 });
 
 app.get('/api/weather/:id', async (req, res) => {
-    const attraction = attractions.find(a => a.id === req.params.id);
+    const attraction = getAttractionsSource().find(a => a.id === req.params.id);
     if (!attraction) {
         return res.status(404).json({ error: 'Attraction not found' });
     }
@@ -1246,7 +1253,7 @@ app.get('/api/weather/coords/:lat/:lng', async (req, res) => {
 });
 
 app.get('/attraction/:id', async (req, res) => {
-    const attraction = attractions.find(a => a.id === req.params.id);
+    const attraction = getAttractionsSource().find(a => a.id === req.params.id);
 
     if (!attraction || attraction.active === false) {
         return res.status(404).render('404', { title: 'Not Found' });
@@ -1269,7 +1276,7 @@ app.get('/attraction/:id', async (req, res) => {
 });
 
 app.get('/api/reviews/:attractionId', async (req, res) => {
-    const attraction = attractions.find(a => a.id === req.params.attractionId);
+    const attraction = getAttractionsSource().find(a => a.id === req.params.attractionId);
     if (!attraction || attraction.active === false) return res.status(404).json({ error: 'Not found' });
     const reviews = await getReviewsForAttraction(req.params.attractionId);
     res.json(reviews);
@@ -1281,7 +1288,7 @@ app.post('/api/reviews/:attractionId', async (req, res) => {
     const userName = req.session && req.session.name;
     if (!userId || !userEmail) return res.status(401).json({ error: 'Log in to leave a review', loginRequired: true });
 
-    const attraction = attractions.find(a => a.id === req.params.attractionId);
+    const attraction = getAttractionsSource().find(a => a.id === req.params.attractionId);
     if (!attraction || attraction.active === false) return res.status(404).json({ error: 'Not found' });
 
     const text = (req.body && req.body.text) ? String(req.body.text).trim() : '';
@@ -1297,7 +1304,7 @@ app.delete('/api/reviews/:attractionId/:reviewId', async (req, res) => {
     const isAdmin = req.session && req.session.role === ROLE_ADMIN;
     if (!userId) return res.status(401).json({ error: 'Log in to delete a review', loginRequired: true });
 
-    const attraction = attractions.find(a => a.id === req.params.attractionId);
+    const attraction = getAttractionsSource().find(a => a.id === req.params.attractionId);
     if (!attraction || attraction.active === false) return res.status(404).json({ error: 'Not found' });
 
     const ref = reviewsRef.child(req.params.attractionId).child(req.params.reviewId);
