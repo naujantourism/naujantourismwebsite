@@ -41,6 +41,10 @@ app.use((req, res, next) => {
     res.locals.userRatings = ratings;
     next();
 });
+app.use((req, res, next) => {
+    res.locals.imageBaseUrl = process.env.IMAGE_BASE_URL || '';
+    next();
+});
 
 // --- Firebase Initialization ---
 let adminConfig;
