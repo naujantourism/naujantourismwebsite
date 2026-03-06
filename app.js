@@ -12,6 +12,24 @@ const multer = require('multer');
 const app = express();
 const port = 3000;
 
+// Supabase Storage (optional): used on Vercel where filesystem is read-only
+const SUPABASE_BUCKET = 'tourism-images';
+let _supabase = undefined;
+function getSupabase() {
+    if (_supabase !== undefined) return _supabase;
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+            const { createClient } = require('@supabase/supabase-js');
+            _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+        } catch (e) {
+            _supabase = null;
+        }
+    } else {
+        _supabase = null;
+    }
+    return _supabase;
+}
+
 // Vercel runs behind a proxy/CDN. Trust it so secure cookies work correctly.
 app.set('trust proxy', 1);
 
@@ -1821,10 +1839,39 @@ loadCategoriesFromFirebase();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
 const PUBLIC_IMAGES = path.join(__dirname, 'public', 'images');
 
-function saveUploadedImages(attractionId, mainFile, galleryFiles) {
-    const dir = path.join(PUBLIC_IMAGES, attractionId);
+async function saveUploadedImages(attractionId, mainFile, galleryFiles) {
     const result = { image: null, gallery: [] };
     if (!attractionId || !/^[a-z0-9-]+$/.test(attractionId)) return result;
+    const supabase = getSupabase();
+    if (supabase) {
+        const prefix = 'images/' + attractionId + '/';
+        try {
+            if (mainFile && mainFile[0] && mainFile[0].buffer) {
+                const ext = (mainFile[0].mimetype === 'image/png') ? '.png' : '.jpg';
+                const storagePath = prefix + 'main' + ext;
+                const contentType = mainFile[0].mimetype || 'image/jpeg';
+                const { error } = await supabase.storage.from(SUPABASE_BUCKET).upload(storagePath, mainFile[0].buffer, { contentType, upsert: true });
+                if (!error) result.image = '/images/' + attractionId + '/main' + ext;
+                else console.error('saveUploadedImages (main):', error.message);
+            }
+            if (galleryFiles && Array.isArray(galleryFiles) && galleryFiles.length > 0) {
+                for (let i = 0; i < galleryFiles.length; i++) {
+                    const file = galleryFiles[i];
+                    if (!file || !file.buffer) continue;
+                    const ext = (file.mimetype === 'image/png') ? '.png' : '.jpg';
+                    const storagePath = prefix + (i + 1) + ext;
+                    const contentType = file.mimetype || 'image/jpeg';
+                    const { error } = await supabase.storage.from(SUPABASE_BUCKET).upload(storagePath, file.buffer, { contentType, upsert: true });
+                    if (!error) result.gallery.push('/images/' + attractionId + '/' + (i + 1) + ext);
+                    else console.error('saveUploadedImages (gallery):', error.message);
+                }
+            }
+        } catch (e) {
+            console.error('saveUploadedImages:', e.message);
+        }
+        return result;
+    }
+    const dir = path.join(PUBLIC_IMAGES, attractionId);
     try {
         fs.mkdirSync(dir, { recursive: true });
         if (mainFile && mainFile[0] && mainFile[0].buffer) {
@@ -1914,11 +1961,37 @@ function nextAvailableNumber(used) {
     return i;
 }
 
-function appendGalleryUploads(attractionId, galleryFiles) {
-    const dir = path.join(PUBLIC_IMAGES, attractionId);
+async function appendGalleryUploads(attractionId, galleryFiles) {
     const added = [];
     if (!attractionId || !/^[a-z0-9-]+$/.test(attractionId)) return added;
     if (!galleryFiles || !Array.isArray(galleryFiles) || galleryFiles.length === 0) return added;
+    const supabase = getSupabase();
+    if (supabase) {
+        const prefix = 'images/' + attractionId + '/';
+        try {
+            const used = new Set();
+            const { data: files } = await supabase.storage.from(SUPABASE_BUCKET).list(prefix.replace(/\/$/, ''));
+            (files || []).forEach(f => {
+                const m = /^(\d+)\.(jpg|jpeg|png|webp)$/i.exec(f.name);
+                if (m) used.add(parseInt(m[1], 10));
+            });
+            for (const file of galleryFiles) {
+                if (!file || !file.buffer) continue;
+                const ext = (file.mimetype === 'image/png') ? '.png' : '.jpg';
+                const n = nextAvailableNumber(used);
+                used.add(n);
+                const storagePath = prefix + n + ext;
+                const contentType = file.mimetype || 'image/jpeg';
+                const { error } = await supabase.storage.from(SUPABASE_BUCKET).upload(storagePath, file.buffer, { contentType, upsert: true });
+                if (!error) added.push('/images/' + attractionId + '/' + n + ext);
+                else console.error('appendGalleryUploads:', error.message);
+            }
+        } catch (e) {
+            console.error('appendGalleryUploads:', e.message);
+        }
+        return added;
+    }
+    const dir = path.join(PUBLIC_IMAGES, attractionId);
     try {
         fs.mkdirSync(dir, { recursive: true });
         const used = listUsedGalleryNumbers(dir);
@@ -1937,10 +2010,17 @@ function appendGalleryUploads(attractionId, galleryFiles) {
     return added;
 }
 
-function deleteGalleryFiles(attractionId, deleteValues) {
-    const dir = path.join(PUBLIC_IMAGES, attractionId);
+async function deleteGalleryFiles(attractionId, deleteValues) {
     const basenames = normalizeDeleteList(deleteValues).map(galleryBasename).filter(Boolean);
     if (!basenames.length) return [];
+    const supabase = getSupabase();
+    if (supabase) {
+        const toRemove = basenames.map(b => 'images/' + attractionId + '/' + b);
+        const { error } = await supabase.storage.from(SUPABASE_BUCKET).remove(toRemove);
+        if (error) console.warn('deleteGalleryFiles:', error.message);
+        return basenames;
+    }
+    const dir = path.join(PUBLIC_IMAGES, attractionId);
     const deleted = [];
     basenames.forEach(b => {
         try {
@@ -1956,8 +2036,21 @@ function deleteGalleryFiles(attractionId, deleteValues) {
     return deleted;
 }
 
-function deleteAttractionImages(attractionId) {
+async function deleteAttractionImages(attractionId) {
     if (!attractionId || !/^[a-z0-9-]+$/.test(attractionId)) return;
+    const supabase = getSupabase();
+    if (supabase) {
+        try {
+            const { data: files } = await supabase.storage.from(SUPABASE_BUCKET).list('images/' + attractionId);
+            if (files && files.length > 0) {
+                const paths = files.map(f => 'images/' + attractionId + '/' + f.name);
+                await supabase.storage.from(SUPABASE_BUCKET).remove(paths);
+            }
+        } catch (e) {
+            console.warn('deleteAttractionImages:', e.message);
+        }
+        return;
+    }
     const dir = path.join(PUBLIC_IMAGES, attractionId);
     try {
         if (fs.existsSync(dir)) {
@@ -1984,7 +2077,7 @@ app.get('/admin/attractions/add', requireAdmin, (req, res) => {
     res.render('admin/addattraction', { title: 'Add Attraction', attraction: null, categories: categoriesList, edit: false, error: req.query.error });
 });
 
-app.post('/admin/attractions/add', requireAdmin, upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }]), (req, res) => {
+app.post('/admin/attractions/add', requireAdmin, upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }]), async (req, res) => {
     const att = parseAttractionFromBody(req.body, null, null);
     if (!att.id || !att.name) {
         return res.redirect('/admin/attractions/add?error=missing');
@@ -1992,7 +2085,7 @@ app.post('/admin/attractions/add', requireAdmin, upload.fields([{ name: 'mainIma
     if (attractions.some(a => a.id === att.id)) {
         return res.redirect('/admin/attractions/add?error=duplicate');
     }
-    const uploaded = saveUploadedImages(att.id, req.files && req.files.mainImage, req.files && req.files.galleryImages);
+    const uploaded = await saveUploadedImages(att.id, req.files && req.files.mainImage, req.files && req.files.galleryImages);
     const attFinal = parseAttractionFromBody(req.body, null, uploaded);
     attractions.push(attFinal);
     saveAttractionsToFirebase();
@@ -2005,14 +2098,14 @@ app.get('/admin/attractions/edit/:id', requireAdmin, (req, res) => {
     res.render('admin/addattraction', { title: 'Edit Attraction', attraction, categories: categoriesList, edit: true, error: req.query.error });
 });
 
-app.post('/admin/attractions/update/:id', requireAdmin, upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }]), (req, res) => {
+app.post('/admin/attractions/update/:id', requireAdmin, upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }]), async (req, res) => {
     const existing = attractions.find(a => a.id === req.params.id);
     if (!existing) return res.redirect('/admin/attractions');
     // main image can be replaced; gallery can be deleted selectively and/or appended
-    const mainUploaded = saveUploadedImages(req.params.id, req.files && req.files.mainImage, null);
-    const deletedBasenames = deleteGalleryFiles(req.params.id, req.body.deleteGallery);
+    const mainUploaded = await saveUploadedImages(req.params.id, req.files && req.files.mainImage, null);
+    const deletedBasenames = await deleteGalleryFiles(req.params.id, req.body.deleteGallery);
     const keptGallery = (existing.gallery || []).filter(src => !deletedBasenames.includes(galleryBasename(src)));
-    const addedGallery = appendGalleryUploads(req.params.id, req.files && req.files.galleryImages);
+    const addedGallery = await appendGalleryUploads(req.params.id, req.files && req.files.galleryImages);
     const finalGallery = [...keptGallery, ...addedGallery];
     const uploaded = { image: mainUploaded.image, gallery: finalGallery };
     const att = parseAttractionFromBody(req.body, existing, uploaded);
@@ -2023,14 +2116,14 @@ app.post('/admin/attractions/update/:id', requireAdmin, upload.fields([{ name: '
     res.redirect('/admin/attractions');
 });
 
-app.post('/admin/attractions/delete/:id', requireAdmin, (req, res) => {
+app.post('/admin/attractions/delete/:id', requireAdmin, async (req, res) => {
     const idx = attractions.findIndex(a => a.id === req.params.id);
     if (idx !== -1) {
         const deleted = attractions[idx];
         attractions.splice(idx, 1);
         saveAttractionsToFirebase();
         if (deleted && deleted.id) {
-            deleteAttractionImages(deleted.id);
+            await deleteAttractionImages(deleted.id);
         }
     }
     res.redirect('/admin/attractions');
