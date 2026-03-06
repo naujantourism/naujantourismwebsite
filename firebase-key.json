@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "naujantourism-ad6a6",
+  "private_key_id": "33ea6e1744daf915b98087fa503742fe59a2e9aa",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCz0VWfAA8hsvrD\noixz45JPT81zBrDQNgOOuFiVfoY4/5d45I6+AlXT5fcvtOSZCIM+yChhc/x0ujWa\nXmFFgzhynN0zIvEqJTe5324XpIa/SepdgbDUpXrMWRFy0ccCaK1VzWdxJjlJED3o\n0gMJrI/7If8s9Gr5MSThNpqm9IV9Jvcf+OHmO3mzv6JFduhfzCufFDQeC1MIPhhs\nFBVZTLwYHDUb/3uqiIfSrVwFoQViSEtQfaJsONkGgpEz05RNJHLUbOq3d/S+FVtj\nL9Ld4arKGukTWg2doT89xJI8XnYEZm5F3uNKwQLBm/ApCoiLXvbf+emQAMbmGHEy\n6FVqcsibAgMBAAECggEAQxd9h1RJ0QyLJNhLFrhX3FDNurfJ2/3zSNp+btTk9rpi\nxWAd5EZRyLy6hGnNi03STmf3LRlOHi1mF6FUUM/bjWP64nwMmGmHh8oWNSsVfaTy\nFY5wsH7HuRwYdwtPYhY1ali32k9lO14cg1Rsfr0MgaqXH6pYiX6tIHyzqkx8zAtQ\nKDNHhyecYbIvhArNJ6jh8Q+YqGLW3eCBDapRQ6vNKNRpsFXV3uApIjlZuqKjlBl5\n+N5xO3W8RKsWuYLIx1Drtdlo4rRq14v6oFBctDXGgGLwg4gvcCjPCbuD5/CKrd5+\nPaXkzv6OwmvxKPocJ7KY1RJB9bgrRJyQ+agLn5rPuQKBgQDcz7WBuQK72V+YRRIA\n2sc6vfqsNhy+HpovPNDIuQcVqCtxYL0YFQa1/LS4ENgS029qDkoYqA08YjJuZrhj\nPaazcNZc3dpP9LZ4QszyfSiV1EoWuwejqns//9ZoI/SYTqxsbLYXLkGjfpag5mQG\n3NmWi1uyeZBm3SFo+Aw/PDsm8wKBgQDQeTxBEreboYgQ7ghwChVbDy4LC1l8buex\n57I+NGq5P8qhSkpT6h6WJtS0hMvlyHF+u92doKYAJeno6Qhte578vyKsJZ6ckuaf\n89r0I0jD58brNGD6GQC0EnNr0mv2wjA+/3MHuXxas+Cf2TTNuNtVf5E6S/Y4QQpH\nbOW8g8yRuQKBgA18tmZ1CYC110vytBXPRyoEXqJUL89BCUPnYA1Sl+cvvW+QbBxj\ndGR7SgKQLNKBjaWZt9bntN9CVDhAF/Uf1+XP95f2iRYnKVoRInmRQYBdViUrSV0q\n1ZpkIxF7WL5Q1+FLhpfF4IZ+/e5YBDYTGUtDudcd678MtLS3qe/W2voXAoGANOtR\nfENAEGWEoKeLxMUKfr7vtSYAZTHR5rsl59xuau/ig+bTz1FSylK5E8nR6FZlWQJf\nUzAAc3EsW08sMH588TOjnYc/KAeyO1AveGGsiu4+9F2rcFEAeLVmTyxu84h/rr4x\nePiAtJWMo4cDfGU8aAul1eKKceUwssjV2HCscSECgYEAsL0XYhrwucZUttWbLx6e\n2TDq8Edwcwoa5MxcmGX0AvWXXekLEvYxbcewpgAXY0LKt+PaVtf0N0kjwad/Fl+q\nwykv39B6HuLU9HUc6ZBGCGx/rkz9FWqIgNdSCLYav9b7UNStsrah1Yi5lW7DQyxa\nSVAtanS4vsbeOc3a+GlnHsY=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@naujantourism-ad6a6.iam.gserviceaccount.com",
+  "client_id": "109784123443738001082",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40naujantourism-ad6a6.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
