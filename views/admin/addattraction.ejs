@@ -1,0 +1,336 @@
+<%- include('../partials/header') %>
+
+<div class="bg-primary py-4 mb-4 text-white">
+    <div class="container">
+        <h1 class="h3 fw-bold mb-0"><%= edit ? 'Edit' : 'Add' %> Attraction</h1>
+        <p class="mb-0 opacity-90"><%= edit ? 'Update attraction details and status.' : 'Create a new attraction listing.' %></p>
+    </div>
+</div>
+
+<div class="container mb-5">
+    <div class="mb-3">
+        <a href="/admin/attractions" class="btn btn-outline-secondary">&larr; Back to list</a>
+    </div>
+
+    <% if (typeof error !== 'undefined' && error) { %>
+    <div class="alert alert-danger">
+        <% if (error === 'missing') { %>ID and Name are required.<% } %>
+        <% if (error === 'duplicate') { %>An attraction with this ID already exists.<% } %>
+    </div>
+    <% } %>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+            <form method="post" action="<%= edit ? '/admin/attractions/update/' + attraction.id : '/admin/attractions/add' %>" enctype="multipart/form-data">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="id" class="form-label">ID (slug) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="id" name="id" required
+                            value="<%= attraction ? attraction.id : '' %>"
+                            pattern="[a-z0-9-]+" title="Lowercase letters, numbers, hyphens only"
+                            <%= edit ? 'readonly' : '' %>>
+                        <% if (edit) { %><small class="text-muted">Cannot change ID when editing.</small><% } %>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="name" class="form-label">Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" required
+                            value="<%= attraction ? attraction.name : '' %>">
+                    </div>
+                    <div class="col-12">
+                        <label for="category" class="form-label">Category</label>
+                        <select class="form-select" id="category" name="category">
+                            <% (categories || []).forEach(function(c) { %>
+                            <option value="<%= c %>" <%= (attraction && attraction.category === c) ? 'selected' : '' %>><%= c %></option>
+                            <% }); %>
+                        </select>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnAddCategory" data-bs-toggle="modal" data-bs-target="#categoryModal">
+                                <i class="fas fa-plus me-1"></i>Add new category
+                            </button>
+                            <div class="d-flex flex-wrap gap-2 mt-2" id="categoryList">
+                                <% (categories || []).forEach(function(c) { %>
+                                <span class="badge bg-light text-dark border category-badge" data-category="<%= c %>">
+                                    <%= c %>
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-secondary category-edit" data-category="<%= c %>" title="Edit"><i class="fas fa-pencil-alt"></i></button>
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-0 text-danger category-delete" data-category="<%= c %>" title="Delete"><i class="fas fa-times"></i></button>
+                                </span>
+                                <% }); %>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category add/edit modal -->
+                    <div class="modal fade" id="categoryModal" tabindex="-1" aria-labelledby="categoryModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="categoryModalLabel">Add category</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <label for="categoryModalInput" class="form-label">Category name</label>
+                                    <input type="text" class="form-control" id="categoryModalInput" placeholder="e.g. Beach">
+                                    <div class="invalid-feedback" id="categoryModalError"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-primary" id="categoryModalSave">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label for="mainImage" class="form-label">Main image (upload)</label>
+                        <p class="small text-muted mb-1">Saved as public/images/<strong>[id]</strong>/main.jpg</p>
+                        <% if (attraction && attraction.image) { %>
+                        <div class="mb-2">
+                            <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= attraction.image %>" alt="Current" class="img-thumbnail" style="max-height: 120px;">
+                            <span class="d-block small text-muted">Current image. Choose a new file to replace.</span>
+                        </div>
+                        <% } %>
+                        <input type="file" class="form-control" id="mainImage" name="mainImage" accept="image/jpeg,image/jpg,image/png,image/webp">
+                    </div>
+                    <div class="col-12">
+                        <label for="desc" class="form-label">Description</label>
+                        <textarea class="form-control" id="desc" name="desc" rows="4"><%= attraction ? attraction.desc : '' %></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label for="highlights" class="form-label">Highlights</label>
+                        <input type="text" class="form-control" id="highlights" name="highlights"
+                            value="<%= attraction ? attraction.highlights : '' %>">
+                    </div>
+                    <div class="col-12">
+                        <label for="uniqueHighlight" class="form-label">Unique highlight</label>
+                        <input type="text" class="form-control" id="uniqueHighlight" name="uniqueHighlight"
+                            value="<%= attraction ? attraction.uniqueHighlight : '' %>">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="lng" class="form-label">Longitude</label>
+                        <input type="text" class="form-control" id="lng" name="lng"
+                            value="<%= attraction && attraction.coordinates && attraction.coordinates[0] ? attraction.coordinates[0] : '' %>" placeholder="121.32">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="lat" class="form-label">Latitude</label>
+                        <input type="text" class="form-control" id="lat" name="lat"
+                            value="<%= attraction && attraction.coordinates && attraction.coordinates[1] ? attraction.coordinates[1] : '' %>" placeholder="13.32">
+                    </div>
+                    <div class="col-12">
+                        <label for="galleryImages" class="form-label">Additional photos (optional)</label>
+                        <p class="small text-muted mb-1">
+                            Saved in the same folder as 1.jpg, 2.jpg, etc.
+                            On edit, you can delete specific photos and add new ones (new uploads will fill missing numbers first).
+                        </p>
+                        <% if (attraction && attraction.gallery && attraction.gallery.length) { %>
+                        <div class="mb-2">
+                            <div class="d-flex flex-wrap gap-2">
+                                <% attraction.gallery.forEach(function(src, idx) { %>
+                                    <div class="border rounded p-2 bg-white">
+                                        <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= src %>" alt="Gallery" class="img-thumbnail d-block" style="max-height: 80px;">
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" name="deleteGallery" value="<%= src %>" id="del_<%= idx %>">
+                                            <label class="form-check-label small" for="del_<%= idx %>">Delete</label>
+                                        </div>
+                                    </div>
+                                <% }); %>
+                            </div>
+                            <span class="d-block small text-muted mt-2">Tip: check photos you want to delete, then upload new ones to add.</span>
+                        </div>
+                        <% } %>
+                        <input type="file" class="form-control" id="galleryImages" name="galleryImages" accept="image/jpeg,image/jpg,image/png,image/webp" multiple>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="active" name="active"
+                                <%= !attraction || attraction.active !== false ? 'checked' : '' %>>
+                            <label class="form-check-label" for="active">Active (show on public site)</label>
+                        </div>
+                    </div>
+                    <hr class="my-2">
+                    <div class="col-12"><h6 class="text-muted">Optional details</h6></div>
+                    <div class="col-md-6">
+                        <label for="openingHours" class="form-label">Opening hours</label>
+                        <input type="text" class="form-control" id="openingHours" name="openingHours"
+                            value="<%= attraction ? attraction.openingHours : '' %>">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="entranceFees" class="form-label">Entrance fees</label>
+                        <input type="text" class="form-control" id="entranceFees" name="entranceFees"
+                            value="<%= attraction ? attraction.entranceFees : '' %>">
+                    </div>
+                    <div class="col-12">
+                        <label for="visitorTips" class="form-label">Visitor tips</label>
+                        <input type="text" class="form-control" id="visitorTips" name="visitorTips"
+                            value="<%= attraction ? attraction.visitorTips : '' %>">
+                    </div>
+                    <div class="col-12">
+                        <label for="facebook" class="form-label">Facebook URL</label>
+                        <input type="text" class="form-control" id="facebook" name="facebook"
+                            value="<%= attraction ? attraction.facebook : '' %>">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="phone" class="form-label">Phone</label>
+                        <input type="text" class="form-control" id="phone" name="phone"
+                            value="<%= attraction ? attraction.phone : '' %>">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email"
+                            value="<%= attraction ? attraction.email : '' %>">
+                    </div>
+                    <div class="col-12 pt-2">
+                        <button type="submit" class="btn btn-primary"><%= edit ? 'Update' : 'Add' %> Attraction</button>
+                        <a href="/admin/attractions" class="btn btn-outline-secondary ms-2">Cancel</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var categorySelect = document.getElementById('category');
+    var categoryListEl = document.getElementById('categoryList');
+    var categoryModal = document.getElementById('categoryModal');
+    var categoryModalLabel = document.getElementById('categoryModalLabel');
+    var categoryModalInput = document.getElementById('categoryModalInput');
+    var categoryModalError = document.getElementById('categoryModalError');
+    var categoryModalSave = document.getElementById('categoryModalSave');
+    var editingCategory = null;
+
+    function escapeHtml(s) {
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function renderCategoryBadges(categories) {
+        if (!categoryListEl) return;
+        categoryListEl.innerHTML = categories.map(function(c) {
+            return '<span class="badge bg-light text-dark border category-badge" data-category="' + escapeHtml(c) + '">' +
+                escapeHtml(c) +
+                ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-secondary category-edit" data-category="' + escapeHtml(c) + '" title="Edit"><i class="fas fa-pencil-alt"></i></button>' +
+                ' <button type="button" class="btn btn-link btn-sm p-0 ms-0 text-danger category-delete" data-category="' + escapeHtml(c) + '" title="Delete"><i class="fas fa-times"></i></button>' +
+                '</span>';
+        }).join('');
+        wireCategoryBadgeClicks();
+    }
+
+    function refreshCategorySelect(categories) {
+        if (!categorySelect) return;
+        var current = categorySelect.value;
+        categorySelect.innerHTML = categories.map(function(c) {
+            return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+        }).join('');
+        if (categories.indexOf(current) !== -1) categorySelect.value = current;
+        else if (categories.length) categorySelect.value = categories[0];
+    }
+
+    function updateFromResponse(categories) {
+        refreshCategorySelect(categories);
+        renderCategoryBadges(categories);
+    }
+
+    function openModalForAdd() {
+        editingCategory = null;
+        categoryModalLabel.textContent = 'Add category';
+        categoryModalInput.value = '';
+        categoryModalInput.classList.remove('is-invalid');
+        categoryModalError.textContent = '';
+    }
+
+    function openModalForEdit(name) {
+        editingCategory = name;
+        categoryModalLabel.textContent = 'Edit category';
+        categoryModalInput.value = name;
+        categoryModalInput.classList.remove('is-invalid');
+        categoryModalError.textContent = '';
+    }
+
+    function wireCategoryBadgeClicks() {
+        if (!categoryListEl) return;
+        categoryListEl.querySelectorAll('.category-edit').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var cat = btn.getAttribute('data-category');
+                if (cat) openModalForEdit(cat);
+                var modal = bootstrap.Modal.getOrCreateInstance(categoryModal);
+                modal.show();
+            });
+        });
+        categoryListEl.querySelectorAll('.category-delete').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var cat = btn.getAttribute('data-category');
+                if (!cat) return;
+                appConfirm('Delete category "' + cat + '"? Attractions using it will keep this name until you change them.', function() {
+                    fetch('/api/admin/categories', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: cat })
+                }).then(function(r) {
+                    if (r.status === 401) { window.location.href = '/login'; return null; }
+                    return r.json();
+                }).then(function(data) {
+                        if (data && data.categories) updateFromResponse(data.categories);
+                    }).catch(function() {});
+                });
+            });
+        });
+    }
+
+    document.getElementById('btnAddCategory').addEventListener('click', function() {
+        openModalForAdd();
+    });
+
+    categoryModal.addEventListener('hidden.bs.modal', function() {
+        editingCategory = null;
+    });
+
+    categoryModalSave.addEventListener('click', function() {
+        var name = categoryModalInput.value.trim();
+        categoryModalInput.classList.remove('is-invalid');
+        categoryModalError.textContent = '';
+        if (!name) {
+            categoryModalInput.classList.add('is-invalid');
+            categoryModalError.textContent = 'Enter a category name.';
+            return;
+        }
+        if (editingCategory) {
+            fetch('/api/admin/categories', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ oldName: editingCategory, newName: name })
+            }).then(function(r) {
+                if (r.status === 401) { window.location.href = '/login'; return null; }
+                if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Failed'); });
+                return r.json();
+            }).then(function(data) {
+                if (data && data.categories) updateFromResponse(data.categories);
+                bootstrap.Modal.getOrCreateInstance(categoryModal).hide();
+            }).catch(function(e) {
+                categoryModalInput.classList.add('is-invalid');
+                categoryModalError.textContent = e.message || 'Failed to update.';
+            });
+        } else {
+            fetch('/api/admin/categories', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            }).then(function(r) {
+                if (r.status === 401) { window.location.href = '/login'; return null; }
+                if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Failed'); });
+                return r.json();
+            }).then(function(data) {
+                if (data && data.categories) updateFromResponse(data.categories);
+                bootstrap.Modal.getOrCreateInstance(categoryModal).hide();
+            }).catch(function(e) {
+                categoryModalInput.classList.add('is-invalid');
+                categoryModalError.textContent = e.message || 'Failed to add.';
+            });
+        }
+    });
+
+    wireCategoryBadgeClicks();
+})();
+</script>
+
+<%- include('../partials/footer') %>

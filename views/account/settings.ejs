@@ -1,0 +1,56 @@
+<%- include('../partials/header') %>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 p-md-5">
+                    <h1 class="h4 fw-bold mb-4">Account settings</h1>
+
+                    <% if (typeof success !== 'undefined' && success) { %>
+                    <div class="alert alert-success py-2">Settings saved.</div>
+                    <% } %>
+
+                    <% if (typeof error !== 'undefined' && error) { %>
+                    <div class="alert alert-danger py-2">
+                        <% if (error === 'current_required') { %>Enter your current password to change it.<% } %>
+                        <% if (error === 'wrong_password') { %>Current password is incorrect.<% } %>
+                        <% if (error === 'password_length') { %>New password must be at least 6 characters.<% } %>
+                    </div>
+                    <% } %>
+
+                    <form method="post" action="/account/settings">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" value="<%= account.email %>" disabled>
+                            <small class="text-muted">Email cannot be changed.</small>
+                        </div>
+                        <div class="mb-4">
+                            <label for="name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="name" name="name" value="<%= account.name %>" placeholder="Your display name" autocomplete="name">
+                        </div>
+
+                        <hr class="my-4">
+                        <h2 class="h6 fw-bold mb-3">Change password</h2>
+                        <p class="small text-muted mb-3">Leave blank to keep your current password.</p>
+                        <div class="mb-3">
+                            <label for="currentPassword" class="form-label">Current password</label>
+                            <input type="password" class="form-control" id="currentPassword" name="currentPassword" autocomplete="current-password">
+                        </div>
+                        <div class="mb-3">
+                            <label for="newPassword" class="form-label">New password (min 6 characters)</label>
+                            <input type="password" class="form-control" id="newPassword" name="newPassword" minlength="6" autocomplete="new-password">
+                        </div>
+
+                        <div class="d-flex gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary">Save changes</button>
+                            <a href="/" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('../partials/footer') %>
