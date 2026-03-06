@@ -9,6 +9,9 @@ const crypto = require('crypto');
 const https = require('https');
 const admin = require('firebase-admin');
 const multer = require('multer');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { safeRedirectUrl, isValidEmailFormat, LIMITS, truncateOrNull } = require('./middleware/security');
 const app = express();
 const port = 3000;
 
@@ -33,11 +36,53 @@ function getSupabase() {
 // Vercel runs behind a proxy/CDN. Trust it so secure cookies work correctly.
 app.set('trust proxy', 1);
 
+// --- Security: enforce strong session secret in production ---
+const isProduction = process.env.NODE_ENV === 'production';
+const defaultSessionSecret = 'naujan-tourism-dev-secret-change-in-production';
+if (isProduction && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === defaultSessionSecret)) {
+    console.error('SECURITY: Set a strong SESSION_SECRET in production. Refusing to start.');
+    process.exit(1);
+}
+
+// --- Security headers (Helmet) ---
+app.use(helmet({
+    contentSecurityPolicy: false, // Enable and tune CSP in production if needed
+    crossOriginEmbedderPolicy: false
+}));
+
+// --- Rate limiting: general (per IP) ---
+const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    message: { error: 'Too many requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+app.use(generalLimiter);
+
+// --- Stricter rate limits for auth and contact (applied per-route below) ---
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many attempts. Try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+const contactLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: { error: 'Too many contact form submissions.' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+// --- Request body size limits (mitigate DoS via large payloads) ---
+app.use(express.json({ limit: '500kb' }));
+app.use(express.urlencoded({ extended: true, limit: '500kb' }));
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'naujan-tourism-dev-secret-change-in-production',
     resave: false,
@@ -1182,13 +1227,16 @@ app.get('/', (req, res) => {
     });
 });
 
-app.post('/contact', async (req, res) => {
-    const name = (req.body && req.body.name) ? String(req.body.name).trim() : '';
-    const email = (req.body && req.body.email) ? String(req.body.email).trim() : '';
-    const subject = (req.body && req.body.subject) ? String(req.body.subject).trim() : '';
-    const message = (req.body && req.body.message) ? String(req.body.message).trim() : '';
+app.post('/contact', contactLimiter, async (req, res) => {
+    const name = truncateOrNull(req.body && req.body.name, LIMITS.contactName);
+    const email = (req.body && req.body.email) ? String(req.body.email).trim().toLowerCase().slice(0, 254) : '';
+    const subject = truncateOrNull(req.body && req.body.subject, LIMITS.contactSubject);
+    const message = truncateOrNull(req.body && req.body.message, LIMITS.contactMessage);
 
     if (!name || !email || !message) {
+        return res.redirect('/?error=contact_failed#contact');
+    }
+    if (!isValidEmailFormat(email)) {
         return res.redirect('/?error=contact_failed#contact');
     }
 
@@ -1315,6 +1363,7 @@ app.post('/api/reviews/:attractionId', async (req, res) => {
 
     const text = (req.body && req.body.text) ? String(req.body.text).trim() : '';
     if (!text) return res.status(400).json({ error: 'Review text is required' });
+    if (text.length > LIMITS.reviewText) return res.status(400).json({ error: 'Review is too long' });
 
     const review = await addReview(req.params.attractionId, text, userId, userEmail, userName);
     if (!review) return res.status(500).json({ error: 'Could not save review' });
@@ -1355,6 +1404,7 @@ app.put('/api/reviews/:attractionId/:reviewId', async (req, res) => {
 
     const text = (req.body && req.body.text) ? String(req.body.text).trim() : '';
     if (!text) return res.status(400).json({ error: 'Review text is required' });
+    if (text.length > LIMITS.reviewText) return res.status(400).json({ error: 'Review is too long' });
 
     const updatedAt = new Date().toISOString();
     await ref.update({ text, updatedAt });
@@ -1453,6 +1503,7 @@ app.put('/api/reviews/:attractionId/:reviewId/replies/:replyId', async (req, res
 
     const text = (req.body && req.body.text) ? String(req.body.text).trim() : '';
     if (!text) return res.status(400).json({ error: 'Reply text is required' });
+    if (text.length > LIMITS.reviewText) return res.status(400).json({ error: 'Reply is too long' });
 
     const updatedAt = new Date().toISOString();
     await replyRef.update({ text, updatedAt });
@@ -1489,6 +1540,9 @@ app.post('/api/reviews/:attractionId/:reviewId/replies', async (req, res) => {
     if (!text) {
         return res.status(400).json({ error: 'Reply text is required' });
     }
+    if (text.length > LIMITS.reviewText) {
+        return res.status(400).json({ error: 'Reply is too long' });
+    }
 
     const parentReplyId = (req.body && req.body.parentReplyId) ? String(req.body.parentReplyId).trim() : null;
 
@@ -1513,7 +1567,7 @@ app.post('/api/reports', async (req, res) => {
     const attractionId = (req.body && req.body.attractionId) ? String(req.body.attractionId).trim() : '';
     const reviewId = (req.body && req.body.reviewId) ? String(req.body.reviewId).trim() : '';
     const replyId = (req.body && req.body.replyId) ? String(req.body.replyId).trim() : null;
-    const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
+    const reason = truncateOrNull(req.body && req.body.reason, LIMITS.reportReason) || '';
 
     if (!attractionId || !reviewId) return res.status(400).json({ error: 'attractionId and reviewId are required' });
 
@@ -1631,7 +1685,7 @@ function isAdminPath(path) {
 
 app.get('/login', (req, res) => {
     if (req.session && req.session.role === ROLE_ADMIN) return res.redirect('/admin/dashboard');
-    const redirect = (req.query.redirect && typeof req.query.redirect === 'string') ? req.query.redirect : '/';
+    const redirect = safeRedirectUrl(req.query.redirect || '/');
     res.render('login', {
         title: 'Login - Naujan Tourism',
         error: req.query.error,
@@ -1640,9 +1694,9 @@ app.get('/login', (req, res) => {
     });
 });
 
-app.post('/login', async (req, res) => {
+app.post('/login', authLimiter, async (req, res) => {
     const { email, password } = req.body || {};
-    let redirectTo = (req.body && req.body.redirect) ? String(req.body.redirect) : '/';
+    let redirectTo = safeRedirectUrl((req.body && req.body.redirect) ? req.body.redirect : '/');
     try {
         const user = await findUserByEmail(email);
         if (!user || !user.passwordHash) return res.redirect('/login?error=invalid&redirect=' + encodeURIComponent(redirectTo));
@@ -1687,9 +1741,9 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.post('/register', async (req, res) => {
+app.post('/register', authLimiter, async (req, res) => {
     const { email, password } = req.body || {};
-    let redirectTo = (req.body && req.body.redirect) || '/';
+    let redirectTo = safeRedirectUrl((req.body && req.body.redirect) || '/');
     try {
         if (!password || password.length < 6) return res.redirect('/login?error=password_length&redirect=' + encodeURIComponent(redirectTo));
         const displayName = (req.body.name || '').trim();
@@ -1836,7 +1890,21 @@ function saveCategoriesToFirebase() {
 
 loadCategoriesFromFirebase();
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+// --- Secure file upload: only images, 5MB max per file ---
+const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+function imageExtFromMime(mimetype) {
+    if (mimetype === 'image/png') return '.png';
+    if (mimetype === 'image/webp') return '.webp';
+    return '.jpg';
+}
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (file && ALLOWED_MIMES.includes(file.mimetype)) return cb(null, true);
+        cb(new Error('Only JPEG, PNG and WebP images are allowed.'), false);
+    }
+});
 const PUBLIC_IMAGES = path.join(__dirname, 'public', 'images');
 
 async function saveUploadedImages(attractionId, mainFile, galleryFiles) {
@@ -1847,7 +1915,7 @@ async function saveUploadedImages(attractionId, mainFile, galleryFiles) {
         const prefix = 'images/' + attractionId + '/';
         try {
             if (mainFile && mainFile[0] && mainFile[0].buffer) {
-                const ext = (mainFile[0].mimetype === 'image/png') ? '.png' : '.jpg';
+                const ext = imageExtFromMime(mainFile[0].mimetype);
                 const storagePath = prefix + 'main' + ext;
                 const contentType = mainFile[0].mimetype || 'image/jpeg';
                 const { error } = await supabase.storage.from(SUPABASE_BUCKET).upload(storagePath, mainFile[0].buffer, { contentType, upsert: true });
@@ -1858,7 +1926,7 @@ async function saveUploadedImages(attractionId, mainFile, galleryFiles) {
                 for (let i = 0; i < galleryFiles.length; i++) {
                     const file = galleryFiles[i];
                     if (!file || !file.buffer) continue;
-                    const ext = (file.mimetype === 'image/png') ? '.png' : '.jpg';
+                    const ext = imageExtFromMime(file.mimetype);
                     const storagePath = prefix + (i + 1) + ext;
                     const contentType = file.mimetype || 'image/jpeg';
                     const { error } = await supabase.storage.from(SUPABASE_BUCKET).upload(storagePath, file.buffer, { contentType, upsert: true });
@@ -1875,7 +1943,7 @@ async function saveUploadedImages(attractionId, mainFile, galleryFiles) {
     try {
         fs.mkdirSync(dir, { recursive: true });
         if (mainFile && mainFile[0] && mainFile[0].buffer) {
-            const ext = (mainFile[0].mimetype === 'image/png') ? '.png' : '.jpg';
+            const ext = imageExtFromMime(mainFile[0].mimetype);
             const dest = path.join(dir, 'main' + ext);
             fs.writeFileSync(dest, mainFile[0].buffer);
             result.image = '/images/' + attractionId + '/main' + ext;
@@ -1883,7 +1951,7 @@ async function saveUploadedImages(attractionId, mainFile, galleryFiles) {
         if (galleryFiles && Array.isArray(galleryFiles) && galleryFiles.length > 0) {
             galleryFiles.forEach((file, i) => {
                 if (!file || !file.buffer) return;
-                const ext = (file.mimetype === 'image/png') ? '.png' : '.jpg';
+                const ext = imageExtFromMime(file.mimetype);
                 const dest = path.join(dir, (i + 1) + ext);
                 fs.writeFileSync(dest, file.buffer);
                 result.gallery.push('/images/' + attractionId + '/' + (i + 1) + ext);
@@ -1977,7 +2045,7 @@ async function appendGalleryUploads(attractionId, galleryFiles) {
             });
             for (const file of galleryFiles) {
                 if (!file || !file.buffer) continue;
-                const ext = (file.mimetype === 'image/png') ? '.png' : '.jpg';
+                const ext = imageExtFromMime(file.mimetype);
                 const n = nextAvailableNumber(used);
                 used.add(n);
                 const storagePath = prefix + n + ext;
@@ -1997,7 +2065,7 @@ async function appendGalleryUploads(attractionId, galleryFiles) {
         const used = listUsedGalleryNumbers(dir);
         galleryFiles.forEach(file => {
             if (!file || !file.buffer) return;
-            const ext = (file.mimetype === 'image/png') ? '.png' : '.jpg';
+            const ext = imageExtFromMime(file.mimetype);
             const n = nextAvailableNumber(used);
             used.add(n);
             const dest = path.join(dir, String(n) + ext);
@@ -2077,7 +2145,14 @@ app.get('/admin/attractions/add', requireAdmin, (req, res) => {
     res.render('admin/addattraction', { title: 'Add Attraction', attraction: null, categories: categoriesList, edit: false, error: req.query.error });
 });
 
-app.post('/admin/attractions/add', requireAdmin, upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }]), async (req, res) => {
+app.post('/admin/attractions/add', requireAdmin, (req, res, next) => {
+    upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }])(req, res, (err) => {
+        if (err && err.code === 'LIMIT_FILE_SIZE') return res.redirect('/admin/attractions/add?error=file_too_large');
+        if (err && err.message && err.message.includes('Only JPEG')) return res.redirect('/admin/attractions/add?error=invalid_file_type');
+        if (err) return next(err);
+        next();
+    });
+}, async (req, res) => {
     const att = parseAttractionFromBody(req.body, null, null);
     if (!att.id || !att.name) {
         return res.redirect('/admin/attractions/add?error=missing');
@@ -2098,7 +2173,14 @@ app.get('/admin/attractions/edit/:id', requireAdmin, (req, res) => {
     res.render('admin/addattraction', { title: 'Edit Attraction', attraction, categories: categoriesList, edit: true, error: req.query.error });
 });
 
-app.post('/admin/attractions/update/:id', requireAdmin, upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }]), async (req, res) => {
+app.post('/admin/attractions/update/:id', requireAdmin, (req, res, next) => {
+    upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }])(req, res, (err) => {
+        if (err && err.code === 'LIMIT_FILE_SIZE') return res.redirect('/admin/attractions?error=file_too_large');
+        if (err && err.message && err.message.includes('Only JPEG')) return res.redirect('/admin/attractions?error=invalid_file_type');
+        if (err) return next(err);
+        next();
+    });
+}, async (req, res) => {
     const existing = attractions.find(a => a.id === req.params.id);
     if (!existing) return res.redirect('/admin/attractions');
     // main image can be replaced; gallery can be deleted selectively and/or appended
