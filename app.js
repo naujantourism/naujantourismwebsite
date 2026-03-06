@@ -12,6 +12,9 @@ const multer = require('multer');
 const app = express();
 const port = 3000;
 
+// Vercel runs behind a proxy/CDN. Trust it so secure cookies work correctly.
+app.set('trust proxy', 1);
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -21,7 +24,13 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'naujan-tourism-dev-secret-change-in-production',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 }
+    proxy: true,
+    cookie: {
+        secure: 'auto',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    }
 }));
 app.use((req, res, next) => {
     res.locals.user = req.session && req.session.email
