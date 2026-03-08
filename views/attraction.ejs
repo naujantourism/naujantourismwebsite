@@ -88,16 +88,15 @@
             <% 
             const hasRoomsOrMenuTop = (attraction.rooms && attraction.rooms.length) || (attraction.menu && attraction.menu.length) || (attraction.addons && attraction.addons.length);
             const hasRentTop = attraction.rent && attraction.rent.length;
-            const showAccommodationButton = (attraction.category === 'Accommodation' || attraction.category === 'Resort') && hasRoomsOrMenuTop;
-            const showEventsButton = attraction.category === 'Event-Place' && hasRentTop; 
+            const showPackagesButton = hasRoomsOrMenuTop || hasRentTop;
             %>
             
-            <% if (showAccommodationButton || showEventsButton) { %>
+            <% if (showPackagesButton) { %>
                 <div class="mb-3">
                     <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm"
                         data-bs-toggle="modal" data-bs-target="#accommodationInfoModal">
                         View
-                        <% if (attraction.category === 'Event-Place') { %>
+                        <% if (hasRentTop && !hasRoomsOrMenuTop) { %>
                             Rent
                         <% } else if (attraction.rooms && attraction.addons) { %>
                             Rooms & Add-ons
@@ -463,11 +462,10 @@
 <% 
 const hasRoomsOrMenu = (attraction.rooms && attraction.rooms.length) || (attraction.menu && attraction.menu.length) || (attraction.addons && attraction.addons.length);
 const hasRent = attraction.rent && attraction.rent.length;
-const showAccommodationModal = (attraction.category === 'Accommodation' || attraction.category === 'Resort') && hasRoomsOrMenu;
-const showEventsModal = attraction.category === 'Event-Place' && hasRent; 
+const showPackagesModal = hasRoomsOrMenu || hasRent;
 %>
 
-<% if (showAccommodationModal || showEventsModal) { %>
+<% if (showPackagesModal) { %>
     <div class="modal fade" id="accommodationInfoModal" tabindex="-1" aria-labelledby="accommodationInfoModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
@@ -478,7 +476,7 @@ const showEventsModal = attraction.category === 'Event-Place' && hasRent;
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <% if (showEventsModal) { %>
+                    <% if (hasRent) { %>
                         <h6 class="fw-bold mb-2">Rental Packages</h6>
                         <div class="row g-3 mb-3">
                             <% attraction.rent.forEach(function(r) { %>
@@ -502,7 +500,9 @@ const showEventsModal = attraction.category === 'Event-Place' && hasRent;
                                 </div>
                             <% }); %>
                         </div>
-                    <% } else { %>
+                    <% } %>
+
+                    <% if (hasRoomsOrMenu) { %>
                         <% if (attraction.rooms && attraction.rooms.length) { %>
                             <h6 class="fw-bold mb-2">Room Options</h6>
                             <div class="row g-3 mb-3">
@@ -557,6 +557,9 @@ const showEventsModal = attraction.category === 'Event-Place' && hasRent;
                                 <% attraction.addons.forEach(function(item) { %>
                                     <div class="col-12 col-md-6 col-lg-4">
                                         <div class="card h-100 shadow-sm border-0">
+                                            <% if (item.image) { %>
+                                                <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= item.image %>" class="card-img-top" alt="<%= item.name %>" loading="lazy" decoding="async" style="height: 140px; object-fit: cover;">
+                                            <% } %>
                                             <div class="card-body">
                                                 <h6 class="card-title mb-1"><%= item.name %></h6>
                                                 <% if (item.details) { %>
