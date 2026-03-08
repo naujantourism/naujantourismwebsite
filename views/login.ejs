@@ -14,6 +14,8 @@
                             <% if (error === 'unverified') { %>Your account is not yet verified. Please check your email inbox for a verification link.<% } %>
                             <% if (error === 'invalid_token' || error === 'invalid_or_expired_token') { %>That verification link is invalid or has expired. Try logging in to request a new one.<% } %>
                             <% if (error === 'banned') { %>Your account has been banned. If you believe this is an error, please contact the site administrator.<% } %>
+                            <% if (error === 'not_registered') { %>That email is not registered. Please create an account first.<% } %>
+                            <% if (error === 'reset_invalid' || error === 'reset_invalid_or_expired') { %>That password reset link is invalid or has expired. Please request a new one.<% } %>
                             <% if (error === 'error') { %>Something went wrong. Please try again.<% } %>
                         </div>
                     <% } %>
@@ -23,6 +25,8 @@
                             <% if (success === 'check_email') { %>Account created! Please check your email for a verification link before logging in.<% } %>
                             <% if (success === 'verified') { %>Your email has been verified. You can now log in.<% } %>
                             <% if (success === 'already_verified') { %>Your email is already verified. You can log in below.<% } %>
+                            <% if (success === 'reset_sent') { %>Password reset link sent. Please check your email.<% } %>
+                            <% if (success === 'reset_done') { %>Your password has been reset. You can now log in.<% } %>
                         </div>
                     <% } %>
 
@@ -47,7 +51,10 @@
                                     <label for="login-password" class="form-label">Password</label>
                                     <input type="password" class="form-control" id="login-password" name="password" required autocomplete="current-password">
                                 </div>
-                                <button type="submit" class="btn btn-primary w-100">Login</button>
+                                <button type="submit" class="btn btn-primary w-100 mb-2">Login</button>
+                                <div class="text-center">
+                                    <a href="/forgot-password" class="small text-decoration-none">Forgot your password?</a>
+                                </div>
                             </form>
                         </div>
                         <div class="tab-pane fade" id="register-pane" role="tabpanel">
