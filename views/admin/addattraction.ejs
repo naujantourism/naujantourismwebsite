@@ -1,5 +1,7 @@
 <%- include('../partials/header') %>
 
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css" rel="stylesheet">
+
 <div class="bg-primary py-4 mb-4 text-white">
     <div class="container">
         <h1 class="h3 fw-bold mb-0"><%= edit ? 'Edit' : 'Add' %> Attraction</h1>
@@ -110,9 +112,18 @@
                             value="<%= attraction && attraction.coordinates && attraction.coordinates[0] ? attraction.coordinates[0] : '' %>" placeholder="121.32">
                     </div>
                     <div class="col-md-6">
-                        <label for="lat" class="form-label">Latitude</label>
-                        <input type="text" class="form-control" id="lat" name="lat"
-                            value="<%= attraction && attraction.coordinates && attraction.coordinates[1] ? attraction.coordinates[1] : '' %>" placeholder="13.32">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="flex-grow-1 me-2">
+                                <label for="lat" class="form-label">Latitude</label>
+                                <input type="text" class="form-control" id="lat" name="lat"
+                                    value="<%= attraction && attraction.coordinates && attraction.coordinates[1] ? attraction.coordinates[1] : '' %>" placeholder="13.32">
+                            </div>
+                            <div class="pt-4">
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#pickLocationModal">
+                                    <i class="fas fa-map-marker-alt me-1"></i> Pick on map
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-12">
                         <label for="galleryImages" class="form-label">Additional photos (optional)</label>
@@ -177,18 +188,360 @@
                         <input type="email" class="form-control" id="email" name="email"
                             value="<%= attraction ? attraction.email : '' %>">
                     </div>
-                    <div class="col-12 pt-2">
+
+                    <hr class="my-4">
+                    <div class="col-12">
+                        <h6 class="text-muted mb-2">Rooms, add-ons & menu (optional)</h6>
+                        <p class="small text-muted mb-3">
+                            Use these sections if this attraction offers rooms, food/menu items, add-ons or rental packages.
+                            Each row is one item with its own <strong>Name</strong>, <strong>Details</strong>,
+                            <strong>Price</strong> and optional <strong>Image URL</strong>.
+                        </p>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">Rooms</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addRoomRowBtn">
+                                <i class="fas fa-plus me-1"></i>Add room
+                            </button>
+                        </div>
+                        <div id="roomsContainer">
+                            <% 
+                            const rooms = (attraction && attraction.rooms) || [];
+                            if (rooms.length) { 
+                                rooms.forEach(function(room) { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="roomsName[]" placeholder="Name"
+                                                value="<%= room.name || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="roomsDetails[]" placeholder="Details"
+                                                value="<%= room.details || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="roomsPrice[]" placeholder="Price"
+                                                value="<%= room.price || '' %>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="roomsImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="roomsImage[]" value="<%= room.image || '' %>">
+                                            <input type="hidden" name="roomsImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% }); } else { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="roomsName[]" placeholder="Name">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="roomsDetails[]" placeholder="Details">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="roomsPrice[]" placeholder="Price">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="roomsImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="roomsImage[]" value="">
+                                            <input type="hidden" name="roomsImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% } %>
+                        </div>
+                        <small class="text-muted">Leave all rows empty if this attraction does not offer rooms.</small>
+                    </div>
+
+                    <div class="col-12 mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">Food / Menu items</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addMenuRowBtn">
+                                <i class="fas fa-plus me-1"></i>Add item
+                            </button>
+                        </div>
+                        <div id="menuContainer">
+                            <% 
+                            const menuItems = (attraction && attraction.menu) || [];
+                            if (menuItems.length) {
+                                menuItems.forEach(function(item) { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="menuName[]" placeholder="Name"
+                                                value="<%= item.name || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="menuDetails[]" placeholder="Details"
+                                                value="<%= item.details || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="menuPrice[]" placeholder="Price"
+                                                value="<%= item.price || '' %>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="menuImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="menuImage[]" value="<%= item.image || '' %>">
+                                            <input type="hidden" name="menuImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% }); } else { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="menuName[]" placeholder="Name">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="menuDetails[]" placeholder="Details">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="menuPrice[]" placeholder="Price">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="menuImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="menuImage[]" value="">
+                                            <input type="hidden" name="menuImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% } %>
+                        </div>
+                        <small class="text-muted">Leave all rows empty if this attraction has no dedicated food or menu offerings.</small>
+                    </div>
+
+                    <div class="col-12 mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">Add-ons & other fees</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addAddonRowBtn">
+                                <i class="fas fa-plus me-1"></i>Add add-on
+                            </button>
+                        </div>
+                        <div id="addonsContainer">
+                            <% 
+                            const addons = (attraction && attraction.addons) || [];
+                            if (addons.length) {
+                                addons.forEach(function(item) { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="addonsName[]" placeholder="Name"
+                                                value="<%= item.name || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="addonsDetails[]" placeholder="Details"
+                                                value="<%= item.details || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="addonsPrice[]" placeholder="Price"
+                                                value="<%= item.price || '' %>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="addonsImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="addonsImage[]" value="<%= item.image || '' %>">
+                                            <input type="hidden" name="addonsImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% }); } else { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="addonsName[]" placeholder="Name">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="addonsDetails[]" placeholder="Details">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="addonsPrice[]" placeholder="Price">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="addonsImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="addonsImage[]" value="">
+                                            <input type="hidden" name="addonsImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% } %>
+                        </div>
+                        <small class="text-muted">Optional extras like cottages, activities, equipment rental, etc.</small>
+                    </div>
+
+                    <div class="col-12 mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">Rental packages (events, full venue, etc.)</label>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addRentRowBtn">
+                                <i class="fas fa-plus me-1"></i>Add package
+                            </button>
+                        </div>
+                        <div id="rentContainer">
+                            <% 
+                            const rentItems = (attraction && attraction.rent) || [];
+                            if (rentItems.length) {
+                                rentItems.forEach(function(item) { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="rentName[]" placeholder="Name"
+                                                value="<%= item.name || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="rentDetails[]" placeholder="Details"
+                                                value="<%= item.details || '' %>">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="rentPrice[]" placeholder="Price"
+                                                value="<%= item.price || '' %>">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="rentImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="rentImage[]" value="<%= item.image || '' %>">
+                                            <input type="hidden" name="rentImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% }); } else { %>
+                                    <div class="row g-2 align-items-end mb-2 dynamic-row">
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="rentName[]" placeholder="Name">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="rentDetails[]" placeholder="Details">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="text" class="form-control" name="rentPrice[]" placeholder="Price">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="file" class="form-control" name="rentImageFile" accept="image/jpeg,image/png,image/webp">
+                                            <input type="hidden" name="rentImage[]" value="">
+                                            <input type="hidden" name="rentImageHasFile[]" value="">
+                                        </div>
+                                        <div class="col-md-1 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-row-btn">&times;</button>
+                                        </div>
+                                    </div>
+                            <% } %>
+                        </div>
+                        <small class="text-muted">Useful for event places or attractions that offer full-space rental.</small>
+                    </div>
+
+                    <div class="col-12 pt-3">
                         <button type="submit" class="btn btn-primary"><%= edit ? 'Update' : 'Add' %> Attraction</button>
                         <a href="/admin/attractions" class="btn btn-outline-secondary ms-2">Cancel</a>
                     </div>
                 </div>
             </form>
+    </div>
+</div>
+
+<div class="modal fade" id="pickLocationModal" tabindex="-1" aria-labelledby="pickLocationModalLabel" aria-hidden="true" data-mapbox-token="<%= typeof mapboxToken !== 'undefined' ? mapboxToken : (process.env.MAPBOX_ACCESS_TOKEN || '') %>">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="pickLocationModalLabel">Pick location on map</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="pickLocationMap" style="width: 100%; height: 400px; border-radius: 10px; overflow: hidden;"></div>
+                <p class="small text-muted mt-2 mb-0">
+                    Click anywhere on the map (or drag the marker) to set the coordinates. The longitude and latitude fields will be updated automatically.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
 
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js"></script>
+
 <script>
 (function() {
+    // Map picker for coordinates
+    (function() {
+        var coordModalEl = document.getElementById('pickLocationModal');
+        if (!coordModalEl) return;
+        var mapInstance = null;
+        var marker = null;
+        var lngInput = document.getElementById('lng');
+        var latInput = document.getElementById('lat');
+
+        function initMap() {
+            if (mapInstance || typeof mapboxgl === 'undefined') return;
+            var token = coordModalEl.getAttribute('data-mapbox-token') || '';
+            if (!token) {
+                var body = coordModalEl.querySelector('.modal-body');
+                if (body) {
+                    body.innerHTML = '<div class="alert alert-warning mb-0">Set MAPBOX_ACCESS_TOKEN in your environment to use the map picker.</div>';
+                }
+                return;
+            }
+            mapboxgl.accessToken = token;
+            var defaultLng = 121.3135;
+            var defaultLat = 13.3242;
+            var startLng = parseFloat(lngInput && lngInput.value);
+            var startLat = parseFloat(latInput && latInput.value);
+            if (!Number.isFinite(startLng) || !Number.isFinite(startLat)) {
+                startLng = defaultLng;
+                startLat = defaultLat;
+            }
+
+            mapInstance = new mapboxgl.Map({
+                container: 'pickLocationMap',
+                style: 'mapbox://styles/mapbox/outdoors-v12',
+                center: [startLng, startLat],
+                zoom: 13
+            });
+            mapInstance.addControl(new mapboxgl.NavigationControl());
+
+            marker = new mapboxgl.Marker({ color: '#d63384', draggable: true })
+                .setLngLat([startLng, startLat])
+                .addTo(mapInstance);
+
+            function updateInputsFromLngLat(lngLat) {
+                if (lngInput) lngInput.value = lngLat.lng.toFixed(6);
+                if (latInput) latInput.value = lngLat.lat.toFixed(6);
+            }
+
+            marker.on('dragend', function() {
+                var lngLat = marker.getLngLat();
+                updateInputsFromLngLat(lngLat);
+            });
+
+            mapInstance.on('click', function(e) {
+                var lngLat = e.lngLat;
+                marker.setLngLat(lngLat);
+                updateInputsFromLngLat(lngLat);
+            });
+        }
+
+        coordModalEl.addEventListener('shown.bs.modal', function() {
+            setTimeout(function() {
+                initMap();
+                if (mapInstance) {
+                    mapInstance.resize();
+                    var startLng = parseFloat(lngInput && lngInput.value);
+                    var startLat = parseFloat(latInput && latInput.value);
+                    if (Number.isFinite(startLng) && Number.isFinite(startLat)) {
+                        mapInstance.setCenter([startLng, startLat]);
+                        if (marker) marker.setLngLat([startLng, startLat]);
+                    }
+                }
+            }, 150);
+        });
+    })();
+
     var categorySelect = document.getElementById('category');
     var categoryListEl = document.getElementById('categoryList');
     var categoryModal = document.getElementById('categoryModal');
@@ -328,6 +681,77 @@
             });
         }
     });
+
+    function setupDynamicGroup(containerId, addBtnId, prefix) {
+        var container = document.getElementById(containerId);
+        if (!container) return;
+        var addBtn = document.getElementById(addBtnId);
+
+        function wireRow(row) {
+            if (!row) return;
+            var removeBtn = row.querySelector('.remove-row-btn');
+            if (removeBtn && !removeBtn._wired) {
+                removeBtn._wired = true;
+                removeBtn.addEventListener('click', function() {
+                    var rows = container.querySelectorAll('.dynamic-row');
+                    if (rows.length > 1) {
+                        row.remove();
+                    } else {
+                        row.querySelectorAll('input').forEach(function(input) {
+                            if (input.type === 'file') {
+                                input.value = '';
+                            } else {
+                                input.value = '';
+                            }
+                        });
+                    }
+                });
+            }
+
+            var fileInputName = prefix + 'ImageFile';
+            var hasFileName = prefix + 'ImageHasFile[]';
+            var fileInput = row.querySelector('input[name="' + fileInputName + '"]');
+            var hasFileInput = row.querySelector('input[name="' + hasFileName + '"]');
+            if (fileInput && !fileInput._wired) {
+                fileInput._wired = true;
+                fileInput.addEventListener('change', function() {
+                    if (!hasFileInput) return;
+                    if (fileInput.files && fileInput.files.length > 0) {
+                        hasFileInput.value = '1';
+                    } else {
+                        hasFileInput.value = '';
+                    }
+                });
+            }
+        }
+
+        function wireExistingRows() {
+            container.querySelectorAll('.dynamic-row').forEach(function(row) {
+                wireRow(row);
+            });
+        }
+
+        if (addBtn) {
+            addBtn.addEventListener('click', function() {
+                var rows = container.querySelectorAll('.dynamic-row');
+                var template = rows[rows.length - 1] || rows[0];
+                if (!template) return;
+                var clone = template.cloneNode(true);
+                clone.querySelectorAll('input').forEach(function(input) {
+                    input.value = '';
+                });
+                container.appendChild(clone);
+                wireRow(clone);
+            });
+        }
+
+        wireExistingRows();
+    }
+
+    setupDynamicGroup('roomsContainer', 'addRoomRowBtn', 'rooms');
+    setupDynamicGroup('menuContainer', 'addMenuRowBtn', 'menu');
+    setupDynamicGroup('addonsContainer', 'addAddonRowBtn', 'addons');
+    setupDynamicGroup('rentContainer', 'addRentRowBtn', 'rent');
 
     wireCategoryBadgeClicks();
 })();
