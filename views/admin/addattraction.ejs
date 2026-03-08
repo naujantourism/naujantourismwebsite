@@ -210,7 +210,7 @@
                             <% 
                             const rooms = (attraction && attraction.rooms) || [];
                             if (rooms.length) { 
-                                rooms.forEach(function(room) { %>
+                                rooms.forEach(function(room, idx) { %>
                                     <div class="row g-2 align-items-end mb-2 dynamic-row">
                                         <div class="col-md-3">
                                             <input type="text" class="form-control" name="roomsName[]" placeholder="Name"
@@ -225,6 +225,15 @@
                                                 value="<%= room.price || '' %>">
                                         </div>
                                         <div class="col-md-2">
+                                            <% if (room.image) { %>
+                                            <div class="existing-image-preview mb-1">
+                                                <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= room.image %>" alt="Room image" class="img-thumbnail d-block" style="max-height: 60px;">
+                                                <div class="form-check mt-1">
+                                                    <input class="form-check-input per-item-remove-checkbox" type="checkbox" id="roomsRemove_<%= idx %>">
+                                                    <label class="form-check-label small" for="roomsRemove_<%= idx %>">Remove image</label>
+                                                </div>
+                                            </div>
+                                            <% } %>
                                             <input type="file" class="form-control" name="roomsImageFile" accept="image/jpeg,image/png,image/webp">
                                             <input type="hidden" name="roomsImage[]" value="<%= room.image || '' %>">
                                             <input type="hidden" name="roomsImageHasFile[]" value="">
@@ -269,7 +278,7 @@
                             <% 
                             const menuItems = (attraction && attraction.menu) || [];
                             if (menuItems.length) {
-                                menuItems.forEach(function(item) { %>
+                                menuItems.forEach(function(item, idx) { %>
                                     <div class="row g-2 align-items-end mb-2 dynamic-row">
                                         <div class="col-md-3">
                                             <input type="text" class="form-control" name="menuName[]" placeholder="Name"
@@ -284,6 +293,15 @@
                                                 value="<%= item.price || '' %>">
                                         </div>
                                         <div class="col-md-2">
+                                            <% if (item.image) { %>
+                                            <div class="existing-image-preview mb-1">
+                                                <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= item.image %>" alt="Menu item image" class="img-thumbnail d-block" style="max-height: 60px;">
+                                                <div class="form-check mt-1">
+                                                    <input class="form-check-input per-item-remove-checkbox" type="checkbox" id="menuRemove_<%= idx %>">
+                                                    <label class="form-check-label small" for="menuRemove_<%= idx %>">Remove image</label>
+                                                </div>
+                                            </div>
+                                            <% } %>
                                             <input type="file" class="form-control" name="menuImageFile" accept="image/jpeg,image/png,image/webp">
                                             <input type="hidden" name="menuImage[]" value="<%= item.image || '' %>">
                                             <input type="hidden" name="menuImageHasFile[]" value="">
@@ -328,7 +346,7 @@
                             <% 
                             const addons = (attraction && attraction.addons) || [];
                             if (addons.length) {
-                                addons.forEach(function(item) { %>
+                                addons.forEach(function(item, idx) { %>
                                     <div class="row g-2 align-items-end mb-2 dynamic-row">
                                         <div class="col-md-3">
                                             <input type="text" class="form-control" name="addonsName[]" placeholder="Name"
@@ -343,6 +361,15 @@
                                                 value="<%= item.price || '' %>">
                                         </div>
                                         <div class="col-md-2">
+                                            <% if (item.image) { %>
+                                            <div class="existing-image-preview mb-1">
+                                                <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= item.image %>" alt="Add-on image" class="img-thumbnail d-block" style="max-height: 60px;">
+                                                <div class="form-check mt-1">
+                                                    <input class="form-check-input per-item-remove-checkbox" type="checkbox" id="addonsRemove_<%= idx %>">
+                                                    <label class="form-check-label small" for="addonsRemove_<%= idx %>">Remove image</label>
+                                                </div>
+                                            </div>
+                                            <% } %>
                                             <input type="file" class="form-control" name="addonsImageFile" accept="image/jpeg,image/png,image/webp">
                                             <input type="hidden" name="addonsImage[]" value="<%= item.image || '' %>">
                                             <input type="hidden" name="addonsImageHasFile[]" value="">
@@ -387,7 +414,7 @@
                             <% 
                             const rentItems = (attraction && attraction.rent) || [];
                             if (rentItems.length) {
-                                rentItems.forEach(function(item) { %>
+                                rentItems.forEach(function(item, idx) { %>
                                     <div class="row g-2 align-items-end mb-2 dynamic-row">
                                         <div class="col-md-3">
                                             <input type="text" class="form-control" name="rentName[]" placeholder="Name"
@@ -402,6 +429,15 @@
                                                 value="<%= item.price || '' %>">
                                         </div>
                                         <div class="col-md-2">
+                                            <% if (item.image) { %>
+                                            <div class="existing-image-preview mb-1">
+                                                <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= item.image %>" alt="Rental package image" class="img-thumbnail d-block" style="max-height: 60px;">
+                                                <div class="form-check mt-1">
+                                                    <input class="form-check-input per-item-remove-checkbox" type="checkbox" id="rentRemove_<%= idx %>">
+                                                    <label class="form-check-label small" for="rentRemove_<%= idx %>">Remove image</label>
+                                                </div>
+                                            </div>
+                                            <% } %>
                                             <input type="file" class="form-control" name="rentImageFile" accept="image/jpeg,image/png,image/webp">
                                             <input type="hidden" name="rentImage[]" value="<%= item.image || '' %>">
                                             <input type="hidden" name="rentImageHasFile[]" value="">
@@ -710,8 +746,10 @@
 
             var fileInputName = prefix + 'ImageFile';
             var hasFileName = prefix + 'ImageHasFile[]';
+            var imageInputName = prefix + 'Image[]';
             var fileInput = row.querySelector('input[name="' + fileInputName + '"]');
             var hasFileInput = row.querySelector('input[name="' + hasFileName + '"]');
+            var imageInput = row.querySelector('input[name="' + imageInputName + '"]');
             if (fileInput && !fileInput._wired) {
                 fileInput._wired = true;
                 fileInput.addEventListener('change', function() {
@@ -720,6 +758,16 @@
                         hasFileInput.value = '1';
                     } else {
                         hasFileInput.value = '';
+                    }
+                });
+            }
+
+            var removeCheckbox = row.querySelector('.per-item-remove-checkbox');
+            if (removeCheckbox && !removeCheckbox._wired) {
+                removeCheckbox._wired = true;
+                removeCheckbox.addEventListener('change', function() {
+                    if (removeCheckbox.checked && imageInput) {
+                        imageInput.value = '';
                     }
                 });
             }
@@ -739,6 +787,9 @@
                 var clone = template.cloneNode(true);
                 clone.querySelectorAll('input').forEach(function(input) {
                     input.value = '';
+                });
+                clone.querySelectorAll('.existing-image-preview').forEach(function(preview) {
+                    preview.parentNode.removeChild(preview);
                 });
                 container.appendChild(clone);
                 wireRow(clone);
