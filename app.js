@@ -2238,6 +2238,19 @@ function normalizeFieldArray(val) {
     return Array.isArray(val) ? val : [val];
 }
 
+function collectPerItemImageUrls(att) {
+    const urls = [];
+    if (!att) return urls;
+    ['rooms', 'menu', 'addons', 'rent'].forEach(key => {
+        (att[key] || []).forEach(item => {
+            if (item && item.image) {
+                urls.push(String(item.image));
+            }
+        });
+    });
+    return urls;
+}
+
 function parseItemsFromBodyGroup(body, prefix, existingItems) {
     const names = normalizeFieldArray(body[prefix + 'Name']);
     const details = normalizeFieldArray(body[prefix + 'Details']);
@@ -2516,6 +2529,7 @@ app.post('/admin/attractions/update/:id', requireAdmin, (req, res, next) => {
 }, async (req, res) => {
     const existing = attractions.find(a => a.id === req.params.id);
     if (!existing) return res.redirect('/admin/attractions');
+    const oldPerItemImages = collectPerItemImageUrls(existing);
     // main image can be replaced; gallery can be deleted selectively and/or appended
     const mainUploaded = await saveUploadedImages(req.params.id, req.files && req.files.mainImage, null);
     const deletedBasenames = await deleteGalleryFiles(req.params.id, req.body.deleteGallery);
@@ -2525,6 +2539,12 @@ app.post('/admin/attractions/update/:id', requireAdmin, (req, res, next) => {
     const uploaded = { image: mainUploaded.image, gallery: finalGallery };
     const att = parseAttractionFromBody(req.body, existing, uploaded);
     await attachItemImages(att, req, req.params.id);
+
+    const newPerItemImages = collectPerItemImageUrls(att);
+    const removedPerItemImages = oldPerItemImages.filter(src => src && !newPerItemImages.includes(src));
+    if (removedPerItemImages.length) {
+        await deleteGalleryFiles(req.params.id, removedPerItemImages);
+    }
     const idx = attractions.findIndex(a => a.id === req.params.id);
     if (idx === -1) return res.redirect('/admin/attractions');
     attractions[idx] = att;
