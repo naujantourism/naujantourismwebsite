@@ -41,6 +41,8 @@ const isProduction = process.env.NODE_ENV === 'production';
 const defaultSessionSecret = 'naujan-tourism-dev-secret-change-in-production';
 if (isProduction && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === defaultSessionSecret)) {
     console.error('SECURITY: Set a strong SESSION_SECRET in production. Refusing to start.');
+    console.error('Add SESSION_SECRET in your host (e.g. Vercel → Project → Settings → Environment Variables).');
+    console.error('Use a long random string (e.g. run: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))")');
     process.exit(1);
 }
 
@@ -148,6 +150,8 @@ const ROLE_ADMIN = 'admin';
 // --- Email verification / mailer setup ---
 const VERIFICATION_TOKEN_BYTES = 32;
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const RESET_TOKEN_BYTES = 32;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 const mailTransport = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -185,6 +189,35 @@ If you did not create this account, you can safely ignore this email.`,
 <p><a href="${verifyUrl}" style="display:inline-block;padding:10px 18px;background:#0d6efd;color:#ffffff;text-decoration:none;border-radius:4px;">Verify my email</a></p>
 <p>Or copy and paste this link into your browser:<br><code>${verifyUrl}</code></p>
 <p>If you did not create this account, you can safely ignore this email.</p>`
+    });
+}
+
+async function sendPasswordResetEmail(toEmail, token, baseUrl) {
+    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(toEmail)}`;
+
+    // If SMTP is not configured, just log the link so local dev still works
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('Password reset link for', toEmail, ':', resetUrl);
+        return;
+    }
+
+    const fromAddress = process.env.EMAIL_FROM || '"Naujan Tourism" <no-reply@naujantourism.local>';
+
+    await mailTransport.sendMail({
+        from: fromAddress,
+        to: toEmail,
+        subject: 'Reset your password for Visit Naujan',
+        text: `You requested to reset your password for Visit Naujan.
+
+To choose a new password, open this link:
+${resetUrl}
+
+If you did not request this, you can safely ignore this email.`,
+        html: `<p>You requested to reset your password for <strong>Visit Naujan</strong>.</p>
+<p>Please choose a new password by clicking the button below:</p>
+<p><a href="${resetUrl}" style="display:inline-block;padding:10px 18px;background:#0d6efd;color:#ffffff;text-decoration:none;border-radius:4px;">Reset my password</a></p>
+<p>Or copy and paste this link into your browser:<br><code>${resetUrl}</code></p>
+<p>If you did not request this, you can safely ignore this email.</p>`
     });
 }
 
@@ -1677,7 +1710,7 @@ app.post('/api/favorite/:id', async (req, res) => {
     res.json(getAttractionStats(id));
 });
 
-// --- Auth routes: login, register, logout ---
+// --- Auth routes: login, register, logout, password reset ---
 function isAdminPath(path) {
     const p = (path || '').trim();
     return p === '/admin' || p === '/admin/' || p.startsWith('/admin/');
@@ -1738,6 +1771,116 @@ app.post('/login', authLimiter, async (req, res) => {
         });
     } catch (e) {
         return res.redirect('/login?error=error&redirect=' + encodeURIComponent(redirectTo));
+    }
+});
+
+// Forgot password: show email form
+app.get('/forgot-password', (req, res) => {
+    res.render('forgot-password', {
+        title: 'Forgot Password - Naujan Tourism'
+    });
+});
+
+// Forgot password: handle form submit and send reset email
+app.post('/forgot-password', authLimiter, async (req, res) => {
+    const { email } = req.body || {};
+    const normalized = (email || '').trim().toLowerCase();
+
+    try {
+        const user = await findUserByEmail(normalized);
+        if (!user) {
+            return res.redirect('/login?error=not_registered');
+        }
+
+        const token = crypto.randomBytes(RESET_TOKEN_BYTES).toString('hex');
+        const expires = Date.now() + RESET_TOKEN_TTL_MS;
+
+        await usersRef.child(user.uid).update({
+            resetToken: token,
+            resetExpires: expires
+        });
+
+        try {
+            const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+            await sendPasswordResetEmail(user.email, token, baseUrl);
+        } catch (mailErr) {
+            console.warn('Password reset: could not send email:', mailErr.message);
+        }
+
+        return res.redirect('/login?success=reset_sent');
+    } catch (err) {
+        console.warn('Password reset request error:', err.message);
+        return res.redirect('/login?error=error');
+    }
+});
+
+// Reset password: show form
+app.get('/reset-password', async (req, res) => {
+    const token = (req.query.token || '').trim();
+    const emailRaw = (req.query.email || '').trim().toLowerCase();
+
+    if (!token || !emailRaw) {
+        return res.redirect('/login?error=reset_invalid');
+    }
+
+    try {
+        const user = await findUserByEmail(emailRaw);
+        if (!user || !user.resetToken || !user.resetExpires) {
+            return res.redirect('/login?error=reset_invalid');
+        }
+
+        const now = Date.now();
+        if (user.resetToken !== token || user.resetExpires <= now) {
+            return res.redirect('/login?error=reset_invalid_or_expired');
+        }
+
+        return res.render('reset-password', {
+            title: 'Reset Password - Naujan Tourism',
+            email: emailRaw,
+            token
+        });
+    } catch (err) {
+        console.warn('Show reset password error:', err.message);
+        return res.redirect('/login?error=error');
+    }
+});
+
+// Reset password: handle new password submit
+app.post('/reset-password', authLimiter, async (req, res) => {
+    const { email, token, password } = req.body || {};
+    const emailRaw = (email || '').trim().toLowerCase();
+    const tokenTrimmed = (token || '').trim();
+
+    if (!emailRaw || !tokenTrimmed) {
+        return res.redirect('/login?error=reset_invalid');
+    }
+
+    if (!password || password.length < 6) {
+        return res.redirect(`/reset-password?token=${encodeURIComponent(tokenTrimmed)}&email=${encodeURIComponent(emailRaw)}&error=password_length`);
+    }
+
+    try {
+        const user = await findUserByEmail(emailRaw);
+        if (!user || !user.resetToken || !user.resetExpires) {
+            return res.redirect('/login?error=reset_invalid');
+        }
+
+        const now = Date.now();
+        if (user.resetToken !== tokenTrimmed || user.resetExpires <= now) {
+            return res.redirect('/login?error=reset_invalid_or_expired');
+        }
+
+        const newHash = await bcrypt.hash(password, SALT_ROUNDS);
+        await usersRef.child(user.uid).update({
+            passwordHash: newHash,
+            resetToken: null,
+            resetExpires: null
+        });
+
+        return res.redirect('/login?success=reset_done');
+    } catch (err) {
+        console.warn('Reset password error:', err.message);
+        return res.redirect('/login?error=error');
     }
 });
 
@@ -1963,11 +2106,182 @@ async function saveUploadedImages(attractionId, mainFile, galleryFiles) {
     return result;
 }
 
+function parseLineItems(raw, existingItems) {
+    if (typeof raw === 'undefined' || raw === null) {
+        return Array.isArray(existingItems) ? existingItems : [];
+    }
+    const text = String(raw).trim();
+    if (!text) {
+        // Field was submitted but left blank – treat as clearing the list.
+        return [];
+    }
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const items = [];
+    for (const line of lines) {
+        const parts = line.split('|').map(p => p.trim());
+        if (!parts[0]) continue;
+        const item = { name: parts[0] };
+        if (parts[1]) item.details = parts[1];
+        if (parts[2]) item.price = parts[2];
+        if (parts[3]) item.image = parts[3];
+        items.push(item);
+    }
+    return items;
+}
+
+async function savePerItemImages(attractionId, groupKey, items, hasFileArr, filesArr) {
+    if (!items || !items.length) return;
+    if (!attractionId || !/^[a-z0-9-]+$/.test(attractionId)) return;
+
+    const supabase = getSupabase();
+    const dir = path.join(PUBLIC_IMAGES, attractionId);
+    let fileIndex = 0;
+
+    const isTruthyFlag = v => v === '1' || v === 'true' || v === 'on' || v === true;
+
+    if (supabase) {
+        const prefix = 'images/' + attractionId + '/';
+        for (let i = 0; i < items.length; i++) {
+            const flag = (hasFileArr && hasFileArr[i]) || '';
+            if (!isTruthyFlag(flag)) continue;
+            const file = filesArr && filesArr[fileIndex];
+            if (!file || !file.buffer) {
+                fileIndex++;
+                continue;
+            }
+            const ext = imageExtFromMime(file.mimetype);
+            const storagePath = prefix + groupKey + '-' + (i + 1) + ext;
+            const contentType = file.mimetype || 'image/jpeg';
+            try {
+                const { error } = await supabase.storage.from(SUPABASE_BUCKET).upload(storagePath, file.buffer, { contentType, upsert: true });
+                if (error) {
+                    console.error('savePerItemImages (' + groupKey + '):', error.message);
+                } else {
+                    items[i].image = '/images/' + attractionId + '/' + groupKey + '-' + (i + 1) + ext;
+                }
+            } catch (e) {
+                console.error('savePerItemImages (' + groupKey + '):', e.message);
+            }
+            fileIndex++;
+        }
+        return;
+    }
+
+    // Local filesystem fallback (development)
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+        for (let i = 0; i < items.length; i++) {
+            const flag = (hasFileArr && hasFileArr[i]) || '';
+            if (!isTruthyFlag(flag)) continue;
+            const file = filesArr && filesArr[fileIndex];
+            if (!file || !file.buffer) {
+                fileIndex++;
+                continue;
+            }
+            const ext = imageExtFromMime(file.mimetype);
+            const dest = path.join(dir, groupKey + '-' + (i + 1) + ext);
+            try {
+                fs.writeFileSync(dest, file.buffer);
+                items[i].image = '/images/' + attractionId + '/' + groupKey + '-' + (i + 1) + ext;
+            } catch (e) {
+                console.error('savePerItemImages local (' + groupKey + '):', e.message);
+            }
+            fileIndex++;
+        }
+    } catch (e) {
+        console.error('savePerItemImages local (' + groupKey + '):', e.message);
+    }
+}
+
+async function attachItemImages(att, req, attractionId) {
+    if (!att || !attractionId) return;
+    const body = req.body || {};
+    const files = req.files || {};
+
+    const getFlags = key => normalizeFieldArray(body[key]);
+
+    await savePerItemImages(
+        attractionId,
+        'rooms',
+        att.rooms || [],
+        getFlags('roomsImageHasFile'),
+        files.roomsImageFile || []
+    );
+
+    await savePerItemImages(
+        attractionId,
+        'menu',
+        att.menu || [],
+        getFlags('menuImageHasFile'),
+        files.menuImageFile || []
+    );
+
+    await savePerItemImages(
+        attractionId,
+        'addons',
+        att.addons || [],
+        getFlags('addonsImageHasFile'),
+        files.addonsImageFile || []
+    );
+
+    await savePerItemImages(
+        attractionId,
+        'rent',
+        att.rent || [],
+        getFlags('rentImageHasFile'),
+        files.rentImageFile || []
+    );
+}
+
+function normalizeFieldArray(val) {
+    if (typeof val === 'undefined' || val === null) return [];
+    return Array.isArray(val) ? val : [val];
+}
+
+function parseItemsFromBodyGroup(body, prefix, existingItems) {
+    const names = normalizeFieldArray(body[prefix + 'Name']);
+    const details = normalizeFieldArray(body[prefix + 'Details']);
+    const prices = normalizeFieldArray(body[prefix + 'Price']);
+    const images = normalizeFieldArray(body[prefix + 'Image']);
+
+    const anyGroupFieldPresent = names.length || details.length || prices.length || images.length;
+
+    if (anyGroupFieldPresent) {
+        const maxLen = Math.max(names.length, details.length, prices.length, images.length);
+        const items = [];
+        for (let i = 0; i < maxLen; i++) {
+            const name = (names[i] || '').trim();
+            const det = (details[i] || '').trim();
+            const price = (prices[i] || '').trim();
+            const img = (images[i] || '').trim();
+            if (!name && !det && !price && !img) continue;
+            const item = {};
+            if (name) item.name = name;
+            if (det) item.details = det;
+            if (price) item.price = price;
+            if (img) item.image = img;
+            items.push(item);
+        }
+        return items;
+    }
+
+    // Fallback for legacy textarea-based fields (body[prefix])
+    if (typeof body[prefix] !== 'undefined') {
+        return parseLineItems(body[prefix], existingItems);
+    }
+
+    return Array.isArray(existingItems) ? existingItems : [];
+}
+
 function parseAttractionFromBody(body, existing, uploaded) {
     const id = (body.id || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || (existing && existing.id);
     const lng = parseFloat(body.lng);
     const lat = parseFloat(body.lat);
     const coordinates = (Number.isFinite(lng) && Number.isFinite(lat)) ? [lng, lat] : (existing && existing.coordinates) || [];
+    const rooms = parseItemsFromBodyGroup(body, 'rooms', existing && existing.rooms);
+    const menu = parseItemsFromBodyGroup(body, 'menu', existing && existing.menu);
+    const addons = parseItemsFromBodyGroup(body, 'addons', existing && existing.addons);
+    const rent = parseItemsFromBodyGroup(body, 'rent', existing && existing.rent);
     let gallery = (uploaded && Array.isArray(uploaded.gallery)) ? uploaded.gallery : null;
     if (gallery === null) {
         const galleryRaw = (body.gallery || '').trim();
@@ -1993,7 +2307,11 @@ function parseAttractionFromBody(body, existing, uploaded) {
         visitorTips: (body.visitorTips || '').trim() || base.visitorTips,
         facebook: (body.facebook || '').trim() || base.facebook,
         phone: (body.phone || '').trim() || base.phone,
-        email: (body.email || '').trim() || base.email
+        email: (body.email || '').trim() || base.email,
+        rooms,
+        menu,
+        addons,
+        rent
     };
 }
 
@@ -2146,7 +2464,14 @@ app.get('/admin/attractions/add', requireAdmin, (req, res) => {
 });
 
 app.post('/admin/attractions/add', requireAdmin, (req, res, next) => {
-    upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }])(req, res, (err) => {
+    upload.fields([
+        { name: 'mainImage', maxCount: 1 },
+        { name: 'galleryImages', maxCount: 20 },
+        { name: 'roomsImageFile', maxCount: 50 },
+        { name: 'menuImageFile', maxCount: 50 },
+        { name: 'addonsImageFile', maxCount: 50 },
+        { name: 'rentImageFile', maxCount: 50 }
+    ])(req, res, (err) => {
         if (err && err.code === 'LIMIT_FILE_SIZE') return res.redirect('/admin/attractions/add?error=file_too_large');
         if (err && err.message && err.message.includes('Only JPEG')) return res.redirect('/admin/attractions/add?error=invalid_file_type');
         if (err) return next(err);
@@ -2162,6 +2487,7 @@ app.post('/admin/attractions/add', requireAdmin, (req, res, next) => {
     }
     const uploaded = await saveUploadedImages(att.id, req.files && req.files.mainImage, req.files && req.files.galleryImages);
     const attFinal = parseAttractionFromBody(req.body, null, uploaded);
+    await attachItemImages(attFinal, req, att.id);
     attractions.push(attFinal);
     saveAttractionsToFirebase();
     res.redirect('/admin/attractions');
@@ -2174,7 +2500,14 @@ app.get('/admin/attractions/edit/:id', requireAdmin, (req, res) => {
 });
 
 app.post('/admin/attractions/update/:id', requireAdmin, (req, res, next) => {
-    upload.fields([{ name: 'mainImage', maxCount: 1 }, { name: 'galleryImages', maxCount: 20 }])(req, res, (err) => {
+    upload.fields([
+        { name: 'mainImage', maxCount: 1 },
+        { name: 'galleryImages', maxCount: 20 },
+        { name: 'roomsImageFile', maxCount: 50 },
+        { name: 'menuImageFile', maxCount: 50 },
+        { name: 'addonsImageFile', maxCount: 50 },
+        { name: 'rentImageFile', maxCount: 50 }
+    ])(req, res, (err) => {
         if (err && err.code === 'LIMIT_FILE_SIZE') return res.redirect('/admin/attractions?error=file_too_large');
         if (err && err.message && err.message.includes('Only JPEG')) return res.redirect('/admin/attractions?error=invalid_file_type');
         if (err) return next(err);
@@ -2191,6 +2524,7 @@ app.post('/admin/attractions/update/:id', requireAdmin, (req, res, next) => {
     const finalGallery = [...keptGallery, ...addedGallery];
     const uploaded = { image: mainUploaded.image, gallery: finalGallery };
     const att = parseAttractionFromBody(req.body, existing, uploaded);
+    await attachItemImages(att, req, req.params.id);
     const idx = attractions.findIndex(a => a.id === req.params.id);
     if (idx === -1) return res.redirect('/admin/attractions');
     attractions[idx] = att;
@@ -2328,6 +2662,110 @@ app.post('/admin/reports/:reportId/unban', requireAdmin, async (req, res) => {
     }
     await ref.update({ status: 'ban_reversed', updatedAt: new Date().toISOString() });
     res.redirect('/admin/reportacc');
+});
+
+// --- Admin: user management (list, change roles, ban/unban) ---
+app.get('/admin/users', requireAdmin, async (req, res) => {
+    try {
+        const snapshot = await usersRef.once('value');
+        const val = snapshot.val() || {};
+        const entries = Object.entries(val);
+
+        const users = await Promise.all(entries.map(async ([uid, user]) => {
+            const isAdmin = await isRole(user, ROLE_ADMIN);
+            return {
+                uid,
+                name: user.name || '',
+                email: user.email || '',
+                role: isAdmin ? ROLE_ADMIN : ROLE_USER,
+                banned: user.banned === true,
+                verified: user.verified !== false
+            };
+        }));
+
+        users.sort((a, b) => {
+            const aEmail = (a.email || '').toLowerCase();
+            const bEmail = (b.email || '').toLowerCase();
+            if (aEmail < bEmail) return -1;
+            if (aEmail > bEmail) return 1;
+            return 0;
+        });
+
+        res.render('admin/users', {
+            title: 'Manage Users - Visit Naujan',
+            users
+        });
+    } catch (err) {
+        console.error('Error loading users for admin list:', err);
+        res.render('admin/users', {
+            title: 'Manage Users - Visit Naujan',
+            users: []
+        });
+    }
+});
+
+app.post('/admin/users/:uid/role', requireAdmin, async (req, res) => {
+    const { uid } = req.params;
+    const { role } = req.body || {};
+    const newRole = role === ROLE_ADMIN ? ROLE_ADMIN : ROLE_USER;
+
+    // Do not allow an admin to remove their own admin role
+    if (uid === req.session.userId && newRole !== ROLE_ADMIN) {
+        return res.redirect('/admin/users');
+    }
+
+    try {
+        const snap = await usersRef.child(uid).once('value');
+        if (!snap.exists()) {
+            return res.redirect('/admin/users');
+        }
+        const roleHash = await hashRole(newRole);
+        await usersRef.child(uid).update({ roleHash });
+    } catch (err) {
+        console.error('Error updating user role:', err);
+    }
+    res.redirect('/admin/users');
+});
+
+app.post('/admin/users/:uid/ban', requireAdmin, async (req, res) => {
+    const { uid } = req.params;
+
+    // Do not allow an admin to ban themselves
+    if (uid === req.session.userId) {
+        return res.redirect('/admin/users');
+    }
+
+    try {
+        const snap = await usersRef.child(uid).once('value');
+        if (!snap.exists()) {
+            return res.redirect('/admin/users');
+        }
+        await usersRef.child(uid).update({
+            banned: true,
+            bannedAt: new Date().toISOString()
+        });
+    } catch (err) {
+        console.error('Error banning user:', err);
+    }
+    res.redirect('/admin/users');
+});
+
+app.post('/admin/users/:uid/unban', requireAdmin, async (req, res) => {
+    const { uid } = req.params;
+
+    try {
+        const snap = await usersRef.child(uid).once('value');
+        if (!snap.exists()) {
+            return res.redirect('/admin/users');
+        }
+        await usersRef.child(uid).update({
+            banned: false,
+            bannedAt: null
+        });
+    } catch (err) {
+        console.error('Error unbanning user:', err);
+    }
+    res.redirect('/admin/users');
 });
 
 app.get('/admin/dashboard', requireAdmin, (req, res) => {
