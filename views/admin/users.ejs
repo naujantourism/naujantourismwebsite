@@ -1,0 +1,89 @@
+<%- include('../partials/header') %>
+
+<div class="bg-primary py-4 mb-4 text-white">
+    <div class="container">
+        <h1 class="h3 fw-bold mb-0">Manage Users</h1>
+        <p class="mb-0 opacity-90">View all registered users, change roles, and manage bans.</p>
+    </div>
+</div>
+
+<div class="container mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="/admin/dashboard" class="btn btn-outline-secondary">&larr; Dashboard</a>
+    </div>
+
+    <% if (users && users.length) { %>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">#</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th class="text-nowrap">Role</th>
+                                <th class="text-nowrap">Status</th>
+                                <th class="text-nowrap pe-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% users.forEach(function(u, index) { %>
+                                <tr class="<%= u.banned ? 'table-danger' : '' %>">
+                                    <td class="ps-3 text-muted small"><%= index + 1 %></td>
+                                    <td>
+                                        <strong><%= u.name || '—' %></strong>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted"><%= u.email || '—' %></span>
+                                    </td>
+                                    <td>
+                                        <form action="/admin/users/<%= u.uid %>/role" method="post" class="d-inline">
+                                            <select name="role" class="form-select form-select-sm d-inline-block w-auto"
+                                                onchange="this.form.submit()">
+                                                <option value="user" <%= u.role === 'user' ? 'selected' : '' %>>User</option>
+                                                <option value="admin" <%= u.role === 'admin' ? 'selected' : '' %>>Admin</option>
+                                            </select>
+                                        </form>
+                                    </td>
+                                    <td>
+                                        <% if (u.banned) { %>
+                                            <span class="badge bg-danger">Banned</span>
+                                        <% } else { %>
+                                            <span class="badge bg-success">Active</span>
+                                        <% } %>
+                                        <% if (u.verified === false) { %>
+                                            <span class="badge bg-warning text-dark ms-1">Unverified</span>
+                                        <% } %>
+                                    </td>
+                                    <td class="pe-3">
+                                        <% if (u.banned) { %>
+                                            <form action="/admin/users/<%= u.uid %>/unban" method="post" class="d-inline"
+                                                onsubmit="var f=this; appConfirm('Unban this user? They will be able to log in again.', function(){ f.submit(); }); return false;">
+                                                <button type="submit" class="btn btn-sm btn-outline-success">Unban</button>
+                                            </form>
+                                        <% } else { %>
+                                            <form action="/admin/users/<%= u.uid %>/ban" method="post" class="d-inline"
+                                                onsubmit="var f=this; appConfirm('Ban this user? They will no longer be able to log in.', function(){ f.submit(); }); return false;">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Ban</button>
+                                            </form>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center py-5 text-muted">
+                <p class="mb-0">No users found.</p>
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<%- include('../partials/footer') %>
+
