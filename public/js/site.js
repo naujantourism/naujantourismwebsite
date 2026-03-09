@@ -213,7 +213,17 @@
   function initCounterAnimations() {
     var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var counters = document.querySelectorAll('.stat-number[data-count]');
-    if (!counters.length || prefersReduced) return;
+    if (!counters.length) return;
+
+    // Respect reduced motion, but still show final numbers
+    if (prefersReduced) {
+      counters.forEach(function(el) {
+        var raw = el.getAttribute('data-count');
+        var target = parseInt(raw, 10);
+        el.textContent = Number.isFinite(target) ? target.toLocaleString() : (raw || '0');
+      });
+      return;
+    }
 
     if (!('IntersectionObserver' in window)) {
       counters.forEach(function(el) { el.textContent = el.getAttribute('data-count'); });
