@@ -326,6 +326,49 @@ h1, h2, h3, h4, h5, h6, .navbar-brand {
     border-radius: 2px;
 }
 
+/* Homepage section header (pill + title + underline) */
+.home-section-header {
+    text-align: center;
+}
+
+.home-section-pill {
+    background: var(--accent-bg) !important;
+    color: var(--accent) !important;
+    font-weight: 700 !important;
+    border: 1px solid rgba(99, 102, 241, 0.16);
+    box-shadow: 0 10px 30px rgba(99, 102, 241, 0.12);
+}
+
+[data-theme="dark"] .home-section-pill {
+    border-color: rgba(129, 140, 248, 0.22);
+    box-shadow: 0 10px 30px rgba(129, 140, 248, 0.12);
+}
+
+.home-section-title {
+    font-family: 'Inter', sans-serif;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 0;
+    color: var(--text-primary);
+    font-size: clamp(2.1rem, 3.2vw, 3.1rem);
+}
+
+.home-section-underline {
+    width: 68px;
+    height: 4px;
+    background: var(--accent-gradient);
+    border-radius: 999px;
+    margin: 14px auto 0;
+}
+
+.home-section-subtitle {
+    color: var(--text-secondary) !important;
+    max-width: 620px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 /* Card Hover Effects */
 .hover-card {
     transition: transform 0.35s cubic-bezier(0.25,0.46,0.45,0.94), box-shadow 0.35s ease;
