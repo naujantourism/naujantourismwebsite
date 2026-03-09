@@ -79,6 +79,14 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Anchor offset for sticky navbar (prevents headings being hidden under nav) */
+html {
+    scroll-padding-top: 92px;
+}
+section[id] {
+    scroll-margin-top: 92px;
+}
+
 .page-content {
     flex: 1 0 auto;
 }
