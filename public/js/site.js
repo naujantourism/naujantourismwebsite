@@ -87,6 +87,7 @@
     if (stats) {
       updateRatingUI(attractionId, value, stats);
       if (window.__userRatings) window.__userRatings[attractionId] = value;
+      if (window.showToast) window.showToast('Rating saved!', 'success');
     }
   }
 
@@ -186,9 +187,11 @@
           b.setAttribute('data-global-fav', stats.favoritesCount);
         });
         updateFavoriteButtons();
+        if (window.showToast) window.showToast(isAdding ? 'Added to favorites!' : 'Removed from favorites!', 'success');
       } else {
         setUserFavoritesFromServer(favs);
         updateFavoriteButtons();
+        if (window.showToast) window.showToast('Could not update favorites. Try again.', 'error');
       }
     });
   }
@@ -200,27 +203,88 @@
     initRatings();
     wireRatingClicks();
     initScrollReveal();
+    initCounterAnimations();
+    initSmoothNavLinks();
+    initBackToTop();
+    initPasswordToggles();
+  }
+
+  // --- Counter animations for stat numbers ---
+  function initCounterAnimations() {
+    var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var counters = document.querySelectorAll('.stat-number[data-count]');
+    if (!counters.length || prefersReduced) return;
+
+    if (!('IntersectionObserver' in window)) {
+      counters.forEach(function(el) { el.textContent = el.getAttribute('data-count'); });
+      return;
+    }
+
+    var observer = new IntersectionObserver(function(entries, obs) {
+      entries.forEach(function(entry) {
+        if (!entry.isIntersecting) return;
+        var el = entry.target;
+        obs.unobserve(el);
+        var target = parseInt(el.getAttribute('data-count'), 10) || 0;
+        var duration = 1500;
+        var start = performance.now();
+
+        function step(now) {
+          var progress = Math.min((now - start) / duration, 1);
+          // Ease out cubic
+          var eased = 1 - Math.pow(1 - progress, 3);
+          el.textContent = Math.round(eased * target).toLocaleString();
+          if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      });
+    }, { threshold: 0.3 });
+
+    counters.forEach(function(el) { observer.observe(el); });
+  }
+
+  // --- Smooth scroll for anchor links ---
+  function initSmoothNavLinks() {    document.querySelectorAll('a[href^="#"]').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        var target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
   }
 
   // --- Scroll reveal animations ---
   function initScrollReveal() {
-    const elements = document.querySelectorAll('.reveal-on-scroll');
+    var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var elements = document.querySelectorAll('.reveal-on-scroll');
     if (!elements.length) return;
 
-    // Fallback: if IntersectionObserver is not supported, just show everything
-    if (!('IntersectionObserver' in window)) {
-      elements.forEach((el) => el.classList.add('is-visible'));
+    // If user prefers reduced motion or no IntersectionObserver, show everything
+    if (prefersReduced || !('IntersectionObserver' in window)) {
+      elements.forEach(function(el) { el.classList.add('is-visible'); });
       return;
     }
 
-    const observer = new IntersectionObserver(
-      (entries, obs) => {
-        entries.forEach((entry) => {
+    // Auto-stagger sibling cards (e.g. .col-md-4 items in a .row)
+    document.querySelectorAll('.row').forEach(function(row) {
+      var children = row.querySelectorAll(':scope > .reveal-on-scroll');
+      children.forEach(function(child, i) {
+        if (!child.getAttribute('data-reveal-delay')) {
+          child.setAttribute('data-reveal-delay', (i * 0.1) + 's');
+        }
+      });
+    });
+
+    var observer = new IntersectionObserver(
+      function(entries, obs) {
+        entries.forEach(function(entry) {
           if (!entry.isIntersecting) return;
-          const el = entry.target;
+          var el = entry.target;
 
           // Optional per-element delay using data-reveal-delay
-          const delay = el.getAttribute('data-reveal-delay');
+          var delay = el.getAttribute('data-reveal-delay');
           if (delay) {
             el.style.setProperty('--reveal-delay', delay);
           }
@@ -230,16 +294,69 @@
         });
       },
       {
-        threshold: 0.15,
+        threshold: 0.1,
+        rootMargin: '0px 0px -40px 0px',
       }
     );
 
-    elements.forEach((el) => observer.observe(el));
+    elements.forEach(function(el) { observer.observe(el); });
   }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
+  }
+
+  // --- Back to top button ---
+  function initBackToTop() {
+    var btn = document.getElementById('backToTop');
+    if (!btn) return;
+    window.addEventListener('scroll', function() {
+      btn.classList.toggle('visible', window.scrollY > 400);
+    }, { passive: true });
+    btn.addEventListener('click', function() {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  // --- Toast notifications ---
+  window.showToast = function(message, type) {
+    type = type || 'info';
+    var stack = document.getElementById('toastStack');
+    if (!stack) return;
+    var icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle', info: 'fa-info-circle' };
+    var iconClass = icons[type] || icons.info;
+    var t = document.createElement('div');
+    t.className = 'toast-custom';
+    t.setAttribute('role', 'status');
+    t.innerHTML = '<i class="fas ' + iconClass + ' toast-icon-' + type + '" aria-hidden="true"></i><span>' +
+      String(message).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+    stack.appendChild(t);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() { t.classList.add('show'); });
+    });
+    setTimeout(function() {
+      t.classList.remove('show');
+      setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 350);
+    }, 3000);
+  };
+
+  // --- Password show/hide toggles ---
+  function initPasswordToggles() {
+    document.querySelectorAll('.btn-pw-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var input = btn.previousElementSibling;
+        if (!input || (input.type !== 'password' && input.type !== 'text')) return;
+        var showing = input.type === 'text';
+        input.type = showing ? 'password' : 'text';
+        var icon = btn.querySelector('i');
+        if (icon) {
+          icon.classList.toggle('fa-eye', showing);
+          icon.classList.toggle('fa-eye-slash', !showing);
+        }
+        btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+      });
+    });
   }
 })();
