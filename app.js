@@ -85,27 +85,6 @@ app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'naujan-tourism-dev-secret-change-in-production',
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: {
-        secure: 'auto',
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000
-    }
-}));
-app.use((req, res, next) => {
-    res.locals.user = req.session && req.session.email
-        ? { id: req.session.userId, email: req.session.email, role: req.session.role, name: req.session.name || req.session.email }
-        : null;
-    const { favorites, ratings } = getCurrentUserFavsAndRatings(req.session && req.session.userId);
-    res.locals.userFavorites = favorites;
-    res.locals.userRatings = ratings;
-    next();
-});
 app.use((req, res, next) => {
     res.locals.imageBaseUrl = process.env.IMAGE_BASE_URL || '';
     next();
@@ -141,6 +120,138 @@ const attractionsRef = db.ref('/attractions');
 const reviewsRef = db.ref('/reviews');
 const reportsRef = db.ref('/reports');
 const categoriesRef = db.ref('/categories');
+
+// --- Production-safe sessions (store in Firebase RTDB) ---
+const sessionsRef = db.ref('/sessions');
+
+function sanitizeSessionForFirebase(sess) {
+    try {
+        // JSON stringify removes undefined + converts Date → string via toJSON()
+        return JSON.parse(JSON.stringify(sess || {}));
+    } catch {
+        return {};
+    }
+}
+
+function reviveSessionFromFirebase(sess) {
+    if (!sess || typeof sess !== 'object') return sess;
+    if (sess.cookie && sess.cookie.expires && typeof sess.cookie.expires === 'string') {
+        const d = new Date(sess.cookie.expires);
+        if (!Number.isNaN(d.getTime())) sess.cookie.expires = d;
+    }
+    return sess;
+}
+
+class FirebaseRtdbSessionStore extends session.Store {
+    constructor({ ref, reapIntervalMs = 60 * 60 * 1000, defaultTtlMs = 7 * 24 * 60 * 60 * 1000 } = {}) {
+        super();
+        this.ref = ref;
+        this.defaultTtlMs = defaultTtlMs;
+        if (this.ref && reapIntervalMs > 0) {
+            setInterval(() => this.reapExpired().catch(() => {}), reapIntervalMs).unref?.();
+        }
+    }
+
+    _getExpiresAt(sess) {
+        const cookie = sess && sess.cookie ? sess.cookie : null;
+        const exp = cookie && cookie.expires ? new Date(cookie.expires).getTime() : NaN;
+        if (Number.isFinite(exp)) return exp;
+        const maxAge = cookie && typeof cookie.maxAge === 'number' ? cookie.maxAge : NaN;
+        if (Number.isFinite(maxAge)) return Date.now() + maxAge;
+        return Date.now() + this.defaultTtlMs;
+    }
+
+    async reapExpired() {
+        if (!this.ref) return;
+        const snap = await this.ref.orderByChild('expiresAt').endAt(Date.now()).limitToFirst(250).once('value');
+        const val = snap.val();
+        if (!val || typeof val !== 'object') return;
+        const updates = {};
+        for (const sid of Object.keys(val)) {
+            updates[sid] = null;
+        }
+        await this.ref.update(updates);
+    }
+
+    get(sid, cb) {
+        this.ref.child(sid).once('value')
+            .then((snap) => {
+                const data = snap.val();
+                if (!data || typeof data !== 'object') return cb(null, null);
+                if (data.expiresAt && typeof data.expiresAt === 'number' && data.expiresAt <= Date.now()) {
+                    // Expired, clean up
+                    this.destroy(sid, () => cb(null, null));
+                    return;
+                }
+                cb(null, reviveSessionFromFirebase(data.sess || null));
+            })
+            .catch((err) => cb(err));
+    }
+
+    set(sid, sess, cb) {
+        const expiresAt = this._getExpiresAt(sess);
+        const payload = {
+            expiresAt,
+            sess: sanitizeSessionForFirebase(sess)
+        };
+        this.ref.child(sid).set(payload).then(() => cb && cb(null)).catch((err) => cb && cb(err));
+    }
+
+    touch(sid, sess, cb) {
+        const expiresAt = this._getExpiresAt(sess);
+        this.ref.child(sid).update({ expiresAt }).then(() => cb && cb(null)).catch((err) => cb && cb(err));
+    }
+
+    destroy(sid, cb) {
+        this.ref.child(sid).remove().then(() => cb && cb(null)).catch((err) => cb && cb(err));
+    }
+}
+
+const sessionStore = new FirebaseRtdbSessionStore({ ref: sessionsRef });
+
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'naujan-tourism-dev-secret-change-in-production',
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    proxy: true,
+    cookie: {
+        secure: 'auto',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    }
+}));
+
+app.use((req, res, next) => {
+    res.locals.user = req.session && req.session.email
+        ? { id: req.session.userId, email: req.session.email, role: req.session.role, name: req.session.name || req.session.email }
+        : null;
+    const { favorites, ratings } = getCurrentUserFavsAndRatings(req.session && req.session.userId);
+    res.locals.userFavorites = favorites;
+    res.locals.userRatings = ratings;
+    next();
+});
+
+// --- Homepage stats: total review count (top-level reviews) ---
+let totalReviewsCount = 0;
+function computeTotalReviewsCount(val) {
+    if (!val || typeof val !== 'object') return 0;
+    let total = 0;
+    for (const perAttraction of Object.values(val)) {
+        if (perAttraction && typeof perAttraction === 'object') {
+            total += Object.keys(perAttraction).length;
+        }
+    }
+    return total;
+}
+reviewsRef.on('value', (snapshot) => {
+    try {
+        totalReviewsCount = computeTotalReviewsCount(snapshot.val());
+    } catch {
+        totalReviewsCount = 0;
+    }
+});
 
 // --- Auth: user accounts in Firebase RTDB (email, password hashed, role hashed) ---
 const SALT_ROUNDS = 10;
@@ -1258,6 +1369,7 @@ app.get('/', (req, res) => {
         featured: topByVisits.length ? topByVisits : active.slice(0, 3),
         totalAttractions: active.length,
         totalCategories: categories.size,
+        totalReviews: typeof totalReviewsCount === 'number' ? totalReviewsCount : 0,
         contactSuccess: req.query.success === 'contact_sent',
         contactError: req.query.error === 'contact_failed'
     });
