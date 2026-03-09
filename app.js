@@ -1122,7 +1122,7 @@ const initialAttractions = [
 loadAttractions();
 
 // --- Weather API integration (WeatherAPI.com) ---
-const WEATHER_API_KEY = process.env.WEATHER_API_KEY || 'dbeefc9785684901b0c32744260303';
+const WEATHER_API_KEY = process.env.WEATHER_API_KEY || '';
 const WEATHER_API_BASE = 'https://api.weatherapi.com/v1';
 
 function httpGetJson(url) {
@@ -1252,9 +1252,12 @@ function computeBestVisitTime(hours) {
 app.get('/', (req, res) => {
     const active = getActiveAttractions();
     const topByVisits = getAttractionsWithVisits().filter(a => a.active !== false).slice(0, 3);
+    const categories = new Set(active.map(a => a.category).filter(Boolean));
     res.render('index', {
         title: 'Visit Naujan - Oriental Mindoro',
         featured: topByVisits.length ? topByVisits : active.slice(0, 3),
+        totalAttractions: active.length,
+        totalCategories: categories.size,
         contactSuccess: req.query.success === 'contact_sent',
         contactError: req.query.error === 'contact_failed'
     });
