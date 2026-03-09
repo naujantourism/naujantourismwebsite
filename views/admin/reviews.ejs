@@ -1,0 +1,180 @@
+<%- include('../partials/header') %>
+
+<div class="bg-primary py-4 mb-4 text-white">
+    <div class="container">
+        <span class="badge rounded-pill px-3 py-2 mb-2" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); color: #fff; font-weight: 600;">
+            <i class="fas fa-comments me-1"></i> Admin
+        </span>
+        <h1 class="h3 fw-bold mb-0">Moderate Reviews</h1>
+        <p class="mb-0" style="opacity: 0.9;">Select an attraction to view and moderate reviews and replies.</p>
+    </div>
+</div>
+
+<div class="container mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="/admin/dashboard" class="btn btn-outline-secondary">&larr; Dashboard</a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 col-lg-3 mb-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light fw-semibold">Attractions with reviews</div>
+                <div class="list-group list-group-flush">
+                    <% if (attractionsWithReviews && attractionsWithReviews.length) { %>
+                        <% attractionsWithReviews.forEach(function(a) { %>
+                        <a href="#" class="list-group-item list-group-item-action attraction-item d-flex justify-content-between align-items-center"
+                            data-attraction-id="<%= a.id %>" data-attraction-name="<%= a.name %>">
+                            <span class="text-truncate"><%= a.name %></span>
+                            <span class="badge bg-primary rounded-pill ms-2"><%= a.count %></span>
+                        </a>
+                        <% }); %>
+                    <% } else { %>
+                        <div class="list-group-item text-muted">No reviews yet.</div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8 col-lg-9">
+            <div id="reviews-panel" class="card border-0 shadow-sm">
+                <div id="reviews-placeholder" class="card-body text-center text-muted py-5">
+                    Select an attraction to view its reviews and replies.
+                </div>
+                <div id="reviews-loading" class="card-body text-center py-5" style="display: none;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 mb-0">Loading reviews…</p>
+                </div>
+                <div id="reviews-content" style="display: none;">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-semibold" id="reviews-attraction-title">Reviews</h6>
+                        <a href="#" id="reviews-attraction-link" target="_blank" class="small">View attraction</a>
+                    </div>
+                    <div class="card-body" id="reviews-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var attractionsWithReviews = <%- JSON.stringify(attractionsWithReviews || []) %>;
+    var placeholder = document.getElementById('reviews-placeholder');
+    var loading = document.getElementById('reviews-loading');
+    var content = document.getElementById('reviews-content');
+    var listEl = document.getElementById('reviews-list');
+    var titleEl = document.getElementById('reviews-attraction-title');
+    var linkEl = document.getElementById('reviews-attraction-link');
+
+    function showPlaceholder() {
+        placeholder.style.display = 'block';
+        loading.style.display = 'none';
+        content.style.display = 'none';
+    }
+    function showLoading() {
+        placeholder.style.display = 'none';
+        loading.style.display = 'block';
+        content.style.display = 'none';
+    }
+    function showContent() {
+        placeholder.style.display = 'none';
+        loading.style.display = 'none';
+        content.style.display = 'block';
+    }
+
+    function renderReplies(replies, attractionId, reviewId) {
+        if (!replies || !replies.length) return '';
+        var html = '<div class="ms-3 mt-2 border-start border-2 border-light ps-3">';
+        replies.forEach(function(rep) {
+            var dateStr = rep.createdAt ? new Date(rep.createdAt).toLocaleString() : '';
+            html += '<div class="mb-2 small">';
+            html += '<strong class="text-primary">' + escapeHtml(rep.userName || rep.userEmail || 'Unknown') + '</strong>';
+            html += ' <span class="text-muted">' + dateStr + '</span><br>';
+            html += '<span class="text-secondary">' + escapeHtml(rep.text) + '</span>';
+            if (rep.children && rep.children.length) {
+                html += renderReplies(rep.children, attractionId, reviewId);
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+        return html;
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function loadReviews(attractionId, attractionName) {
+        showLoading();
+        titleEl.textContent = 'Reviews: ' + attractionName;
+        linkEl.href = '/attraction/' + encodeURIComponent(attractionId);
+
+        fetch('/admin/reviews/data/' + encodeURIComponent(attractionId), { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : []; })
+            .then(function(reviews) {
+                showContent();
+                if (!reviews || reviews.length === 0) {
+                    listEl.innerHTML = '<p class="text-muted mb-0">No reviews for this attraction.</p>';
+                    return;
+                }
+                var html = '';
+                reviews.forEach(function(r) {
+                    var dateStr = r.createdAt ? new Date(r.createdAt).toLocaleString() : '';
+                    var reactions = (r.reactions && typeof r.reactions === 'object') ? Object.keys(r.reactions).length : 0;
+                    html += '<div class="border-bottom pb-3 mb-3" data-review-id="' + escapeHtml(r.id) + '">';
+                    html += '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">';
+                    html += '<div><strong class="text-primary">' + escapeHtml(r.userName || r.userEmail || 'Unknown') + '</strong>';
+                    html += ' <span class="text-muted small">' + dateStr + '</span></div>';
+                    html += '<form action="/admin/reviews/delete/' + escapeHtml(attractionId) + '/' + escapeHtml(r.id) + '" method="post" class="d-inline" onsubmit="var f=this; appConfirm(\'Delete this review and all its replies?\', function(){ f.submit(); }); return false;">';
+                    html += '<button type="submit" class="btn btn-sm btn-outline-danger">Delete review</button>';
+                    html += '</form>';
+                    html += '</div>';
+                    html += '<p class="mb-1 mt-1">' + escapeHtml(r.text) + '</p>';
+                    html += '<span class="badge bg-light text-dark">' + reactions + ' reaction(s)</span>';
+                    if (r.replies && r.replies.length) {
+                        html += '<div class="mt-2"><strong class="small text-muted">Replies:</strong>';
+                        html += renderReplies(r.replies, attractionId, r.id);
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                });
+                listEl.innerHTML = html;
+            })
+            .catch(function() {
+                showContent();
+                listEl.innerHTML = '<p class="text-danger mb-0">Failed to load reviews.</p>';
+            });
+    }
+
+    function selectAttraction(id, name) {
+        document.querySelectorAll('.attraction-item').forEach(function(el) {
+            el.classList.toggle('active', el.getAttribute('data-attraction-id') === id);
+        });
+        loadReviews(id, name);
+        window.location.hash = encodeURIComponent(id);
+    }
+
+    document.querySelectorAll('.attraction-item').forEach(function(el) {
+        el.addEventListener('click', function(e) {
+            e.preventDefault();
+            var id = el.getAttribute('data-attraction-id');
+            var name = el.getAttribute('data-attraction-name');
+            selectAttraction(id, name);
+        });
+    });
+
+    var hash = window.location.hash.slice(1);
+    var decodedHash = hash ? decodeURIComponent(hash) : '';
+    if (decodedHash && attractionsWithReviews.some(function(a) { return a.id === decodedHash; })) {
+        var chosen = attractionsWithReviews.find(function(a) { return a.id === decodedHash; });
+        selectAttraction(chosen.id, chosen.name);
+    } else if (attractionsWithReviews.length > 0) {
+        var first = attractionsWithReviews[0];
+        selectAttraction(first.id, first.name);
+    }
+})();
+</script>
+
+<%- include('../partials/footer') %>

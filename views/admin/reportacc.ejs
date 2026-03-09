@@ -1,0 +1,99 @@
+<%- include('../partials/header') %>
+
+<div class="bg-primary py-4 mb-4 text-white">
+    <div class="container">
+        <span class="badge rounded-pill px-3 py-2 mb-2" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); color: #fff; font-weight: 600;">
+            <i class="fas fa-flag me-1"></i> Admin
+        </span>
+        <h1 class="h3 fw-bold mb-0">Reported Comments</h1>
+        <p class="mb-0" style="opacity: 0.9;">Review reports and take action. You can dismiss a report, ban the comment author, or reverse a ban if it was not justified.</p>
+    </div>
+</div>
+
+<div class="container mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="/admin/dashboard" class="btn btn-outline-secondary">&larr; Dashboard</a>
+    </div>
+
+    <% if (typeof reports !== 'undefined' && reports.length > 0) { %>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Reported by</th>
+                                <th>Comment</th>
+                                <th>Comment author</th>
+                                <th>Attraction</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% reports.forEach(function(r) { %>
+                            <tr>
+                                <td class="text-nowrap small text-muted"><%= new Date(r.createdAt).toLocaleString() %></td>
+                                <td class="small">
+                                    <%= r.reportedByName || r.reportedByEmail || 'User' %>
+                                    <% if (r.reportedByEmail) { %><br><span class="text-muted"><%= r.reportedByEmail %></span><% } %>
+                                </td>
+                                <td class="small" style="max-width: 220px;"><%= r.commentText %></td>
+                                <td class="small">
+                                    <strong><%= r.commentAuthorName || r.commentAuthorEmail || 'Unknown' %></strong>
+                                    <% if (r.commentAuthorEmail) { %><br><span class="text-muted"><%= r.commentAuthorEmail %></span><% } %>
+                                </td>
+                                <td class="small">
+                                    <a href="/attraction/<%= r.attractionId %>" target="_blank"><%= r.attractionName || r.attractionId %></a>
+                                </td>
+                                <td><%= r.replyId ? 'Reply' : 'Review' %></td>
+                                <td>
+                                    <% if (r.status === 'pending') { %>
+                                        <span class="badge bg-warning text-dark">Pending</span>
+                                    <% } else if (r.status === 'dismissed') { %>
+                                        <span class="badge bg-secondary">Dismissed</span>
+                                    <% } else if (r.status === 'action_taken') { %>
+                                        <span class="badge bg-danger">Action taken</span>
+                                    <% } else if (r.status === 'ban_reversed') { %>
+                                        <span class="badge bg-info">Ban reversed</span>
+                                    <% } else { %>
+                                        <span class="badge bg-light text-dark"><%= r.status %></span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <% if (r.status === 'pending') { %>
+                                        <form action="/admin/reports/<%= r.id %>/dismiss" method="post" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary">Dismiss</button>
+                                        </form>
+                                        <form action="/admin/reports/<%= r.id %>/ban" method="post" class="d-inline ms-1"
+                                            onsubmit="var f=this; appConfirm('Ban this user? They will no longer be able to log in.', function(){ f.submit(); }); return false;">
+                                            <button type="submit" class="btn btn-sm btn-danger">Ban user</button>
+                                        </form>
+                                    <% } else if (r.status === 'action_taken') { %>
+                                        <form action="/admin/reports/<%= r.id %>/unban" method="post" class="d-inline"
+                                            onsubmit="var f=this; appConfirm('Reverse this ban? The user will be able to log in again.', function(){ f.submit(); }); return false;">
+                                            <button type="submit" class="btn btn-sm btn-outline-success">Reverse ban</button>
+                                        </form>
+                                    <% } else { %>
+                                        <span class="text-muted small">—</span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center py-5 text-muted">
+                <p class="mb-0">No reported comments.</p>
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<%- include('../partials/footer') %>

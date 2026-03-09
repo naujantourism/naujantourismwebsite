@@ -1,0 +1,202 @@
+<%- include('partials/header') %>
+
+<header class="hero-section position-relative overflow-hidden">
+    
+    <div id="heroCarousel" class="carousel slide carousel-fade position-absolute top-0 start-0 w-100 h-100" data-bs-ride="carousel">
+        <div class="carousel-inner w-100 h-100">
+            <div class="carousel-item active h-100">
+                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/lake.jpg');"></div>
+            </div>
+            <div class="carousel-item h-100">
+                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/simbahan/main.jpg');"></div>
+            </div>
+            <div class="carousel-item h-100">
+                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/liwasang.jpg');"></div>
+            </div>
+            <div class="carousel-item h-100">
+                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/333-steps.jpg');"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="hero-overlay position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-center">
+        <div class="container text-white z-2 reveal-on-scroll">
+            <span class="badge rounded-pill px-3 py-2 mb-3" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.05em;">
+                <i class="fas fa-map-marker-alt me-1"></i> Oriental Mindoro, Philippines
+            </span>
+            <h1 class="hero-title">Discover Naujan</h1>
+            <p class="lead mb-4 fs-5" style="max-width: 550px; margin: 0 auto; opacity: 0.9;">"Experience Nature, Culture, and Adventure."</p>
+            <a href="/explore" class="btn btn-explore">Explore Now <i class="fas fa-arrow-right ms-2"></i></a>
+        </div>
+    </div>
+
+    <div class="position-absolute top-0 start-0 w-100 h-100 bg-dark opacity-50 z-1"></div>
+
+</header>
+
+<section class="py-5 text-center container reveal-on-scroll">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <span class="badge rounded-pill px-3 py-2 mb-3" style="background: var(--accent-bg); color: var(--accent); font-weight: 600;">
+                <i class="fas fa-heart me-1"></i> Why Naujan
+            </span>
+            <h2 class="section-title" style="color: var(--accent);">Love Naujan</h2>
+            <p class="lead mt-3" style="color: var(--text-secondary); max-width: 600px; margin: 0 auto;">
+                Experience the serene beauty of Naujan Lake, walk through the historic ruins of Bancuro, 
+                and taste the local flavors of Mindoro. Your gateway to nature and history.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="container">
+        <div class="row g-3 justify-content-center">
+            <div class="col-6 col-md-3 reveal-on-scroll" data-reveal-delay="0s">
+                <div class="stat-card">
+                    <div class="stat-number" data-count="<%= typeof totalAttractions !== 'undefined' ? totalAttractions : featured.length %>">0</div>
+                    <div class="stat-label">Places</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3 reveal-on-scroll" data-reveal-delay="0.1s">
+                <div class="stat-card">
+                    <div class="stat-number" data-count="<%= typeof totalCategories !== 'undefined' ? totalCategories : '5' %>">0</div>
+                    <div class="stat-label">Categories</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3 reveal-on-scroll" data-reveal-delay="0.2s">
+                <div class="stat-card">
+                    <div class="stat-number" data-count="<%= typeof totalReviews !== 'undefined' ? totalReviews : '0' %>">0</div>
+                    <div class="stat-label">Reviews</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-5 bg-light">
+    <div class="container">
+        <div class="text-center mb-5">
+            <span class="badge rounded-pill px-3 py-2 mb-3" style="background: var(--accent-bg); color: var(--accent); font-weight: 600;">
+                <i class="fas fa-fire me-1"></i> Popular
+            </span>
+            <h3 class="fw-bold" style="font-size: 2rem;">Top Attractions</h3>
+            <p class="text-muted small mb-0">Most visited places — based on recent page views</p>
+        </div>
+        <div class="row g-4">
+            <% featured.forEach(function(spot, index) { %>
+                <div class="col-md-4 d-flex align-items-stretch reveal-on-scroll" data-reveal-delay="<%= index * 0.15 %>s">
+                    <div class="card h-100 border-0 hover-card w-100" style="overflow: hidden;">
+                        <div class="position-relative" style="overflow: hidden;">
+                            <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= spot.image %>" class="card-img-top" alt="<%= spot.name %>" style="height: 260px; object-fit: cover; transition: transform 0.5s ease;">
+                            <% if (spot.visits !== undefined && spot.visits > 0 && index === 0) { %>
+                                <span class="position-absolute top-0 start-0 m-2 badge" style="background: var(--warning-gradient);"><i class="fas fa-crown me-1"></i>Most visited</span>
+                            <% } %>
+                            <% if (spot.visits !== undefined && spot.visits > 0) { %>
+                                <span class="position-absolute top-0 end-0 m-2 badge bg-dark bg-opacity-75"><%= spot.visits %> views</span>
+                            <% } %>
+                            <div class="position-absolute bottom-0 start-0 end-0" style="height: 80px; background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);"></div>
+                        </div>
+                        
+                        <div class="card-body text-center p-4 d-flex flex-column">
+                            <div class="mb-2 d-flex flex-column justify-content-center" style="min-height: 70px;">
+                                <div>
+                                    <span class="badge rounded-pill px-3 py-1 mb-2" style="background: var(--accent-bg); color: var(--accent); font-size: 0.75rem;"><%= spot.category %></span>
+                                    <h4 class="card-title fw-bold m-0" style="font-size: 1.15rem;"><%= spot.name %></h4>
+                                </div>
+                            </div>
+                            <p class="card-text small mb-4" style="color: var(--text-secondary); height: 55px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">
+                               <%= spot.desc %>
+                            </p>
+                            <div class="mt-auto">
+                                <a href="/attraction/<%= spot.id %>" class="btn btn-primary rounded-pill px-4">View Details <i class="fas fa-arrow-right ms-1" style="font-size: 0.8rem;"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    </div>
+</section>
+
+<section class="py-5 text-center container reveal-on-scroll">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <span class="badge rounded-pill px-3 py-2 mb-3" style="background: var(--accent-bg); color: var(--accent); font-weight: 600;">
+                <i class="fas fa-info-circle me-1"></i> About
+            </span>
+            <h2 class="section-title" style="color: var(--accent);">About Naujan</h2>
+            <p class="lead mt-3" style="color: var(--text-secondary); max-width: 600px; margin: 0 auto;">
+                Naujan is a first-class municipality in Oriental Mindoro, rich in culture, history, and natural wonders. 
+                Whether you are looking for a peaceful retreat by the lake or a journey through historic ruins, 
+                Naujan offers an unforgettable experience.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section id="contact" class="py-5 bg-light reveal-on-scroll">
+    <div class="container">
+        <div class="row justify-content-center align-items-start g-4 g-lg-5">
+            <div class="col-lg-6 col-xl-5">
+                <span class="badge rounded-pill px-3 py-2 mb-3" style="background: var(--accent-bg); color: var(--accent); font-weight: 600;">
+                    <i class="fas fa-paper-plane me-1"></i> Get in Touch
+                </span>
+                <h2 class="section-title mb-3" style="color: var(--accent);">Contact Naujan Tourism</h2>
+                <hr class="section-divider mb-3">
+                <p class="text-muted mb-4">Send us a message and we’ll get back to you as soon as we can.</p>
+                <% if (typeof contactSuccess !== 'undefined' && contactSuccess) { %>
+                    <div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+                        <i class="fas fa-check-circle me-2"></i>Your message has been sent. We’ll be in touch soon.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <% } %>
+                <% if (typeof contactError !== 'undefined' && contactError) { %>
+                    <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+                        <i class="fas fa-exclamation-circle me-2"></i>Something went wrong. Please try again or email us directly.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <% } %>
+                <form action="/contact" method="post" class="card border-0 shadow-sm p-3 contact-form-card">
+                    <div class="mb-2">
+                        <label for="contact-name" class="form-label small mb-1">Your name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="contact-name" name="name" required maxlength="200" placeholder="Juan Dela Cruz" value="">
+                    </div>
+                    <div class="mb-2">
+                        <label for="contact-email" class="form-label small mb-1">Your email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control form-control-sm" id="contact-email" name="email" required placeholder="you@example.com" value="">
+                    </div>
+                    <div class="mb-3">
+                        <label for="contact-message" class="form-label small mb-1">Message <span class="text-danger">*</span></label>
+                        <textarea class="form-control form-control-sm" id="contact-message" name="message" rows="3" required maxlength="5000" placeholder="Your message..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">
+                        <i class="fas fa-paper-plane me-1"></i>Send message
+                    </button>
+                </form>
+            </div>
+            <div class="col-lg-6 col-xl-5 text-center text-lg-start">
+                <span class="badge rounded-pill px-3 py-2 mb-3" style="background: var(--accent-bg); color: var(--accent); font-weight: 600;">
+                    <i class="fas fa-share-alt me-1"></i> Social
+                </span>
+                <h2 class="section-title mb-3" style="color: var(--accent);">Connect With Us</h2>
+                <hr class="section-divider mb-3 mx-lg-0 mx-auto">
+                <p style="color: var(--text-secondary);" class="mb-4">Follow us on social media for updates and inspiration.</p>
+                <div class="d-flex flex-wrap gap-3 justify-content-center justify-content-lg-start">
+                    <a href="https://web.facebook.com/NaujanTourism" target="_blank" rel="noopener noreferrer" class="btn btn-primary rounded-pill px-4 py-2">
+                        <i class="fab fa-facebook-f me-2"></i> Facebook
+                    </a>
+                    <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" class="btn rounded-pill px-4 py-2" style="background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); border: none; color: #fff;">
+                        <i class="fab fa-instagram me-2"></i> Instagram
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+#contact .contact-form-card { max-width: 380px; }
+</style>
+
+<%- include('partials/footer') %>

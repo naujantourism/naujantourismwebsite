@@ -1,0 +1,277 @@
+<%- include('partials/header') %>
+
+    <div class="container py-4">
+        <div class="text-center mb-4">
+            <span class="badge rounded-pill px-3 py-2 mb-3" style="background: var(--accent-bg); color: var(--accent); font-weight: 600;">
+                <i class="fas fa-cloud-sun me-1"></i> Weather
+            </span>
+            <h1 class="fw-bold" style="color: var(--accent);">Naujan Weather Map</h1>
+            <p class="fs-5 mx-auto" style="color: var(--text-secondary); max-width: 550px;">Explore our local attractions. Click any map pin to see its current and future forecast!</p>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-12 col-xl-10">
+                <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                    <div class="card-body p-0 position-relative">
+                        <div id="weatherMap" style="height: 70vh; width: 100%; z-index: 1;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <style>
+        .legend-gradient {
+            width: 100%;
+            height: 12px;
+            border-radius: 4px;
+            margin: 8px 0 4px 0;
+        }
+        .temp-gradient {
+            background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000, #800000);
+        }
+        .rain-gradient {
+            background: linear-gradient(to right, #e0f7fa, #00ffff, #0000ff, #ff00ff, #800080);
+        }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize map centered strictly on Naujan, Oriental Mindoro
+            const map = L.map('weatherMap').setView([13.27, 121.28], 11);
+
+            // Use a dark grey base map to make the weather colors pop just like Windy.com
+            const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 18,
+                minZoom: 10
+            }).addTo(map);
+
+            // ACCURACY FIX: Use UTC time for WeatherAPI to prevent local timezone mismatch
+            const pad2 = (n) => String(n).padStart(2, '0');
+            const now = new Date();
+            const yyyymmdd = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}`;
+            const hh = pad2(now.getUTCHours()); // Weather tiles operate on UTC models
+
+            // 1. Temperature Overlay
+            const tempTilesUrl = `https://weathermaps.weatherapi.com/tmp2m/tiles/${yyyymmdd}${hh}/{z}/{x}/{y}.png`;
+            const tempLayer = L.tileLayer(tempTilesUrl, { opacity: 0.55, maxNativeZoom: 6, maxZoom: 18, crossOrigin: true });
+
+            // 2. Rain / Precipitation Overlay
+            const rainTilesUrl = `https://weathermaps.weatherapi.com/precip/tiles/${yyyymmdd}${hh}/{z}/{x}/{y}.png`;
+            const rainLayer = L.tileLayer(rainTilesUrl, { opacity: 0.70, maxNativeZoom: 6, maxZoom: 18, crossOrigin: true });
+
+            // Default layer grouping
+            const overlayMaps = {
+                "🌡️ Temperature": tempLayer,
+                "🌧️ Rain Forecast": rainLayer
+            };
+
+            // Add layer toggle to map
+            L.control.layers({"OpenStreetMap": baseLayer}, overlayMaps, { collapsed: false }).addTo(map);
+            
+            // Add Temperature by default
+            tempLayer.addTo(map);
+
+            // DYNAMIC LEGEND SETUP
+            const legend = L.control({ position: 'bottomright' });
+            legend.onAdd = function () {
+                const div = L.DomUtil.create('div', 'map-legend');
+                div.id = 'dynamic-legend';
+                return div;
+            };
+            legend.addTo(map);
+
+            const legendContainer = document.getElementById('dynamic-legend');
+
+            const renderTempLegend = () => {
+                legendContainer.innerHTML = `
+                    <strong>Temperature (°C)</strong>
+                    <div class="legend-gradient temp-gradient"></div>
+                    <div class="d-flex justify-content-between text-muted small">
+                        <span>-10°</span><span>10°</span><span>30°</span><span>40°+</span>
+                    </div>`;
+            };
+
+            const renderRainLegend = () => {
+                legendContainer.innerHTML = `
+                    <strong>Precipitation (mm/h)</strong>
+                    <div class="legend-gradient rain-gradient"></div>
+                    <div class="d-flex justify-content-between text-muted small">
+                        <span>Light</span><span>Moderate</span><span>Heavy</span><span>Extreme</span>
+                    </div>`;
+            };
+
+            // Set default legend
+            renderTempLegend();
+
+            // --- NEW: Click anywhere on the map for custom weather ---
+            map.on('click', function (e) {
+                const lat = e.latlng.lat.toFixed(4);
+                const lng = e.latlng.lng.toFixed(4);
+
+                // Create and open a popup at the clicked coordinates
+                const customPopup = L.popup({ minWidth: 260 })
+                    .setLatLng(e.latlng)
+                    .setContent(`
+                        <div style="min-width: 250px; text-align: center; padding: 5px;">
+                            <h6 class="mb-1 fw-bold text-primary">Custom Location</h6>
+                            <span class="badge bg-secondary mb-3">${lat}, ${lng}</span>
+                            <div id="weather-info-custom-${lat}-${lng}" class="mt-2 p-2 border rounded bg-light" style="min-height: 120px;">
+                                <div class="d-flex justify-content-center align-items-center h-100 flex-column">
+                                    <div class="spinner-border text-primary" role="status" style="width: 1.5rem; height: 1.5rem;"></div>
+                                    <span class="small text-muted mt-2 d-block">Loading live forecast...</span>
+                                </div>
+                            </div>
+                        </div>
+                    `)
+                    .openOn(map);
+
+                // Fetch weather from the new backend coords endpoint
+                fetch(`/api/weather/coords/${lat}/${lng}`)
+                    .then(response => response.json())
+                    .then(weather => {
+                        // Use the unique ID based on lat/lng so we target the exact popup
+                        const weatherContainer = document.getElementById(`weather-info-custom-${lat}-${lng}`);
+                        if (!weatherContainer) return; // Exit if user closed popup before it loaded
+
+                        if (weather && !weather.error) {
+                            let html = `
+                                <div class="d-flex align-items-center justify-content-center mb-1">
+                                    <img src="${weather.icon}" alt="${weather.conditionText}" style="width: 45px; height: 45px; object-fit: contain;">
+                                    <span class="fs-4 fw-bold ms-2 text-dark">${weather.tempC}°C</span>
+                                </div>
+                                <p class="small fw-bold mb-1 text-dark">${weather.conditionText}</p>
+                                <p class="small text-muted mb-2">Feels like: ${weather.feelsLikeC}°C | Rain: ${weather.chanceOfRain}%</p>
+                                <hr class="my-2">
+                            `;
+
+                            if (weather.forecastDays && weather.forecastDays.length > 0) {
+                                html += `<div class="d-flex justify-content-between mt-2">`;
+                                    weather.forecastDays.forEach((day, index) => {
+                                        html += `
+                                         <div class="text-center px-1">
+                                            <p class="small mb-0 fw-bold text-dark" style="font-size: 0.75rem;">${index === 0 ? 'Today' : day.date}</p>
+                                            <img src="${day.icon}" style="width: 30px; height: 30px;">
+                                            <p class="mb-0" style="font-size: 0.75rem;">
+                                                <span class="fw-bold text-danger">${day.maxTemp}°</span> 
+                                                <span class="text-muted">${day.minTemp}°</span>
+                                            </p>
+                                        </div>
+                                    `;
+                                });
+                                html += `</div>`;
+                            } else {
+                                html += `<p class="small text-muted">Forecast unavailable</p>`;
+                            }
+
+                            weatherContainer.innerHTML = html;
+                        } else {
+                            weatherContainer.innerHTML = `<p class="small text-danger mb-0 py-3">Forecast unavailable.</p>`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error fetching custom weather:", error);
+                        const weatherContainer = document.getElementById(`weather-info-custom-${lat}-${lng}`);
+                        if (weatherContainer) {
+                            weatherContainer.innerHTML = `<p class="small text-danger mb-0 py-3">Failed to load data.</p>`;
+                        }
+                    });
+            });
+            // --- END NEW CODE ---
+
+            // Listen for map layer changes to swap the legend
+            map.on('overlayadd', function (event) {
+                if (event.name === "🌡️ Temperature") renderTempLegend();
+                if (event.name === "🌧️ Rain Forecast") renderRainLegend();
+            });
+
+            // Restrict Map Bounds
+            const bounds = L.latLngBounds([12.8, 120.8], [13.6, 121.8]);
+            map.setMaxBounds(bounds);
+            map.on('drag', () => map.panInsideBounds(bounds, { animate: false }));
+
+            // Fetch Backend Attractions
+            const attractions = <%- JSON.stringify(attractions) %>;
+
+            attractions.forEach(function (spot) {
+                if (spot.coordinates && spot.coordinates.length === 2) {
+                    const latLng = [spot.coordinates[1], spot.coordinates[0]];
+                    const marker = L.marker(latLng).addTo(map);
+
+                    const popupContent = `
+                    <div style="min-width: 250px; text-align: center; padding: 5px;">
+                        <h6 class="mb-1 fw-bold text-primary">${spot.name}</h6>
+                        <span class="badge bg-secondary mb-3">${spot.category}</span>
+                        <div id="weather-info-${spot.id}" class="mt-2 p-2 border rounded bg-light" style="min-height: 120px;">
+                            <div class="d-flex justify-content-center align-items-center h-100 flex-column">
+                                <div class="spinner-border text-primary" role="status" style="width: 1.5rem; height: 1.5rem;"></div>
+                                <span class="small text-muted mt-2 d-block">Loading live forecast...</span>
+                            </div>
+                        </div>
+                        <a href="/attraction/${spot.id}" class="btn btn-sm btn-outline-primary mt-3 w-100 rounded-pill">View Details</a>
+                    </div>`;
+
+                    marker.bindPopup(popupContent, { minWidth: 260, closeButton: true });
+
+                    // Fetch 3-day weather on popup open
+                    marker.on('popupopen', function () {
+                        const weatherContainer = document.getElementById(`weather-info-${spot.id}`);
+                        if (!weatherContainer.dataset.loaded) {
+                            fetch(`/api/weather/${spot.id}`)
+                                .then(response => response.json())
+                                .then(weather => {
+                                    if (weather && !weather.error) {
+                                        // 1. Current Weather Block
+                                        let html = `
+                                            <div class="d-flex align-items-center justify-content-center mb-1">
+                                                <img src="${weather.icon}" alt="${weather.conditionText}" style="width: 45px; height: 45px; object-fit: contain;">
+                                                <span class="fs-4 fw-bold ms-2 text-dark">${weather.tempC}°C</span>
+                                            </div>
+                                            <p class="small fw-bold mb-1 text-dark">${weather.conditionText}</p>
+                                            <p class="small text-muted mb-2">Feels like: ${weather.feelsLikeC}°C | Rain: ${weather.chanceOfRain}%</p>
+                                            <hr class="my-2">
+                                        `;
+
+                                        // 2. 3-Day Forecast Block
+                                        if (weather.forecastDays && weather.forecastDays.length > 0) {
+                                            html += `<div class="d-flex justify-content-between mt-2">`;
+                                                weather.forecastDays.forEach((day, index) => {
+    html += `
+        <div class="text-center px-1">
+            <p class="small mb-0 fw-bold text-dark" style="font-size: 0.75rem;">${index === 0 ? 'Today' : day.date}</p>
+                                                        <img src="${day.icon}" style="width: 30px; height: 30px;">
+                                                        <p class="mb-0" style="font-size: 0.75rem;">
+                                                            <span class="fw-bold text-danger">${day.maxTemp}°</span> 
+                                                            <span class="text-muted">${day.minTemp}°</span>
+                                                        </p>
+                                                    </div>
+                                                `;
+                                            });
+                                            html += `</div>`;
+                                        } else {
+                                            html += `<p class="small text-muted">Forecast unavailable</p>`;
+                                        }
+
+                                        weatherContainer.innerHTML = html;
+                                    } else {
+                                        weatherContainer.innerHTML = `<p class="small text-danger mb-0 py-3">Forecast unavailable.</p>`;
+                                    }
+                                    weatherContainer.dataset.loaded = "true";
+                                })
+                                .catch(error => {
+                                    console.error("Error:", error);
+                                    weatherContainer.innerHTML = `<p class="small text-danger mb-0 py-3">Failed to load data.</p>`;
+                                });
+                        }
+                    });
+                }
+            });
+        });
+    </script>
+
+<%- include('partials/footer') %>

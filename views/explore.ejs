@@ -1,0 +1,254 @@
+<%- include('partials/header') %>
+
+    <div class="explore-hero-gradient py-5 mb-5 text-white text-center reveal-on-scroll">
+        <span class="badge rounded-pill px-3 py-2 mb-3" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); color: #fff; font-weight: 600;">
+            <i class="fas fa-compass me-1"></i> Discover Places
+        </span>
+        <h1 class="fw-bold display-4">Explore Naujan</h1>
+        <p class="lead" style="opacity: 0.9; max-width: 500px; margin: 0 auto;">Find your next adventure in our historic town.</p>
+    </div>
+
+    <div class="container mb-5">
+
+        <% if (title.includes('Search Results')) { %>
+            <h3 class="mb-4">
+                <%= title %>
+            </h3>
+            <% } %>
+
+                <div class="d-flex justify-content-center flex-wrap mb-5 gap-2 reveal-on-scroll" id="category-filters">
+                    <button class="btn btn-primary rounded-pill filter-btn px-4" data-filter="all">All</button>
+                    <button class="btn btn-outline-danger rounded-pill filter-btn px-4" data-filter="favorites"
+                        id="favoritesFilterBtn" title="<%= typeof user !== 'undefined' && user ? 'Show saved places' : 'Log in to see your favorites' %>">
+                        <i class="fa-solid fa-heart me-1" aria-hidden="true"></i>
+                        Favorites <span class="badge text-bg-light ms-1" id="favoritesCount">0</span>
+                    </button>
+                    <% (categories || []).forEach(function(c) { %>
+                    <button class="btn btn-outline-primary rounded-pill filter-btn px-4" data-filter="<%= c %>"><%= c %></button>
+                    <% }); %>
+                </div>
+
+                <div class="row" id="spots-container">
+                    <% if (attractions.length> 0) { %>
+                        <% attractions.forEach(function(spot, index) { %>
+
+                            <div class="col-12 mb-5 spot-item reveal-on-scroll <%= index % 2 === 0 ? 'reveal-from-left' : 'reveal-from-right' %>" data-category="<%= spot.category %>"
+                                data-id="<%= spot.id %>">
+
+                                <div class="row align-items-center g-4 <%= index % 2 === 0 ? '' : 'flex-row-reverse' %>">
+                                    <div class="col-md-6">
+                                        <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= spot.image %>" class="img-fluid rounded-3 shadow"
+                                            alt="<%= spot.name %>" loading="lazy" decoding="async"
+                                            style="width: 100%; height: 400px; object-fit: cover;">
+                                    </div>
+                                    <div class="col-md-6 p-4 p-lg-5">
+                                        <span class="badge rounded-pill px-3 py-1" style="background: var(--accent-bg); color: var(--accent); font-weight: 600; font-size: 0.8rem;">
+                                            <%= spot.category %>
+                                        </span>
+                                        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+                                            <div>
+                                                <h2 class="display-5 fw-bold mt-2 mb-2">
+                                                    <%= spot.name %>
+                                                </h2>
+                                                <% if (spot.uniqueHighlight) { %>
+                                                    <span class="unique-highlight-pill mb-3">
+                                                        <%= spot.uniqueHighlight %>
+                                                    </span>
+                                                    <% } %>
+                                            </div>
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-danger rounded-pill px-3 favorite-btn"
+                                                data-favorite-id="<%= spot.id %>"
+                                                data-global-fav="<%= spot.stats ? spot.stats.favoritesCount : 0 %>"
+                                                aria-pressed="false" title="Save to favorites">
+                                                <i class="fa-regular fa-heart me-1" aria-hidden="true"></i>
+                                                <span class="favorite-btn-label">Save (<%= spot.stats ?
+                                                        spot.stats.favoritesCount : 0 %>)</span>
+                                            </button>
+                                        </div>
+                                        <p class="lead text-muted" style="max-width: 36rem;">
+                                            <%= spot.desc %>
+                                        </p>
+                                        <a href="/attraction/<%= spot.id %>"
+                                            class="btn btn-primary rounded-pill px-4">View Map & Details</a>
+                                    </div>
+                                </div>
+                            </div>
+                            <% }); %>
+                                <% } else { %>
+                                    <div class="col-12 text-center py-5">
+                                        <h3 class="text-muted">No tourist spots found matching your search.</h3>
+                                        <a href="/explore" class="btn btn-outline-primary mt-3">View All Spots</a>
+                                    </div>
+                                    <% } %>
+                </div>
+
+                <!-- Pagination controls -->
+                <div class="pagination-wrapper" id="paginationControls" style="display: none;"></div>
+                <div class="pagination-info" id="paginationInfo"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const filterBtns = document.querySelectorAll('.filter-btn');
+            const spots = document.querySelectorAll('.spot-item');
+            const ITEMS_PER_PAGE = 6;
+            let currentPage = 1;
+            let filteredSpots = [];
+
+            function getFavorites() {
+                if (window.__userFavorites && Array.isArray(window.__userFavorites)) return window.__userFavorites;
+                return [];
+            }
+
+            function updateFavoriteUI() {
+                const favs = new Set(getFavorites());
+                const favCountEl = document.getElementById('favoritesCount');
+                if (favCountEl) favCountEl.textContent = String(favs.size);
+            }
+
+            function getFilteredSpots(filterValue) {
+                const favs = new Set(getFavorites());
+                const result = [];
+                spots.forEach(spot => {
+                    const category = spot.getAttribute('data-category');
+                    const id = spot.getAttribute('data-id');
+                    const shouldShow =
+                        filterValue === 'all' ||
+                        (filterValue === 'favorites' && favs.has(id)) ||
+                        category === filterValue;
+                    if (shouldShow) result.push(spot);
+                });
+                return result;
+            }
+
+            function renderPage(page) {
+                currentPage = page;
+                const totalPages = Math.max(1, Math.ceil(filteredSpots.length / ITEMS_PER_PAGE));
+                if (currentPage > totalPages) currentPage = totalPages;
+
+                const start = (currentPage - 1) * ITEMS_PER_PAGE;
+                const end = start + ITEMS_PER_PAGE;
+
+                // Hide all spots first
+                spots.forEach(spot => { spot.style.display = 'none'; });
+
+                // Show only current page items with stagger animation
+                filteredSpots.forEach((spot, i) => {
+                    if (i >= start && i < end) {
+                        spot.style.display = 'block';
+                        spot.style.animation = 'none';
+                        spot.offsetHeight; // trigger reflow
+                        const delay = (i - start) * 0.08;
+                        spot.style.animation = 'staggerFadeIn 0.5s ease ' + delay + 's forwards';
+                        spot.style.opacity = '0';
+                    }
+                });
+
+                renderPagination(totalPages);
+            }
+
+            function renderPagination(totalPages) {
+                const wrapper = document.getElementById('paginationControls');
+                const info = document.getElementById('paginationInfo');
+
+                if (filteredSpots.length <= ITEMS_PER_PAGE) {
+                    wrapper.style.display = 'none';
+                    info.textContent = '';
+                    return;
+                }
+
+                wrapper.style.display = 'flex';
+                let html = '';
+
+                // Prev button
+                html += '<button class="pagination-btn" data-page="' + (currentPage - 1) + '"' +
+                    (currentPage === 1 ? ' disabled' : '') + ' aria-label="Previous page">' +
+                    '<i class="fas fa-chevron-left"></i></button>';
+
+                // Page numbers
+                for (let p = 1; p <= totalPages; p++) {
+                    if (totalPages <= 7 || p === 1 || p === totalPages ||
+                        (p >= currentPage - 1 && p <= currentPage + 1)) {
+                        html += '<button class="pagination-btn' + (p === currentPage ? ' active' : '') +
+                            '" data-page="' + p + '">' + p + '</button>';
+                    } else if (p === currentPage - 2 || p === currentPage + 2) {
+                        html += '<span class="px-1" style="color:var(--text-muted)">&hellip;</span>';
+                    }
+                }
+
+                // Next button
+                html += '<button class="pagination-btn" data-page="' + (currentPage + 1) + '"' +
+                    (currentPage === totalPages ? ' disabled' : '') + ' aria-label="Next page">' +
+                    '<i class="fas fa-chevron-right"></i></button>';
+
+                wrapper.innerHTML = html;
+
+                const startItem = (currentPage - 1) * ITEMS_PER_PAGE + 1;
+                const endItem = Math.min(currentPage * ITEMS_PER_PAGE, filteredSpots.length);
+                info.textContent = 'Showing ' + startItem + '\u2013' + endItem + ' of ' + filteredSpots.length + ' places';
+
+                // Wire pagination clicks
+                wrapper.querySelectorAll('.pagination-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const page = parseInt(btn.getAttribute('data-page'));
+                        if (!isNaN(page)) {
+                            renderPage(page);
+                            // Scroll to top of spots container
+                            document.getElementById('spots-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    });
+                });
+            }
+
+            function applyFilter(filterValue) {
+                filteredSpots = getFilteredSpots(filterValue);
+                currentPage = 1;
+                renderPage(1);
+            }
+
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    filterBtns.forEach(b => {
+                        b.classList.remove('btn-primary');
+                        b.classList.add(b.getAttribute('data-filter') === 'favorites' ? 'btn-outline-danger' : 'btn-outline-primary');
+                    });
+                    btn.classList.remove(btn.getAttribute('data-filter') === 'favorites' ? 'btn-outline-danger' : 'btn-outline-primary');
+                    btn.classList.add('btn-primary');
+
+                    const filterValue = btn.getAttribute('data-filter');
+                    applyFilter(filterValue);
+                });
+            });
+
+            // Keep favorites count and filter results in sync with global favorites changes
+            window.addEventListener('favorites:changed', () => {
+                updateFavoriteUI();
+                const activeFilter = document.querySelector('.filter-btn.btn-primary');
+                const activeValue = activeFilter ? activeFilter.getAttribute('data-filter') : 'all';
+                applyFilter(activeValue || 'all');
+            });
+
+            updateFavoriteUI();
+            // Initialize pagination with all spots
+            applyFilter('all');
+        });
+    </script>
+
+    <style>
+        /* Small animation for smooth filtering */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+
+
+    <%- include('partials/footer') %>

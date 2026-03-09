@@ -1,0 +1,186 @@
+<%- include('../partials/header') %>
+
+<div class="bg-primary py-4 mb-4 text-white">
+    <div class="container">
+        <span class="badge rounded-pill px-3 py-2 mb-2" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); color: #fff; font-weight: 600;">
+            <i class="fas fa-map-marker-alt me-1"></i> Admin
+        </span>
+        <h1 class="h3 fw-bold mb-0">Manage Attractions</h1>
+        <p class="mb-0" style="opacity: 0.9;">Add, edit, delete, or set active/inactive.</p>
+    </div>
+</div>
+
+<div class="container mb-5">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <a href="/admin/dashboard" class="btn btn-outline-secondary">&larr; Dashboard</a>
+        <a href="/admin/attractions/add" class="btn btn-primary">+ Add Attraction</a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 admin-attractions-filter-card">
+        <div class="card-body p-3 p-md-4">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-5 col-lg-4">
+                    <label for="attractionsSearch" class="form-label small fw-semibold mb-1">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text" class="form-control" id="attractionsSearch" placeholder="Search by name or category..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label for="attractionsCategory" class="form-label small fw-semibold mb-1">Category</label>
+                    <select class="form-select" id="attractionsCategory">
+                        <option value="">All categories</option>
+                        <% (categories || []).forEach(function(c) { %>
+                        <option value="<%= c %>"><%= c %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3 col-lg-2">
+                    <label for="attractionsStatus" class="form-label small fw-semibold mb-1">Status</label>
+                    <select class="form-select" id="attractionsStatus">
+                        <option value="">All status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-auto">
+                    <button type="button" class="btn btn-outline-secondary" id="attractionsFilterReset" title="Clear filters">
+                        <i class="fas fa-times me-1"></i>Clear
+                    </button>
+                </div>
+            </div>
+            <p class="small text-muted mb-0 mt-2" id="attractionsFilterCount">
+                Showing <strong id="attractionsVisibleCount">0</strong> of <strong id="attractionsTotalCount"><%= (attractions || []).length %></strong> attractions
+            </p>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <div id="attractionsTableBody" class="row g-3">
+                    <% (attractions || []).forEach(function(a) { %>
+                    <div class="col-12 col-md-6 col-lg-4 col-xl-3 attraction-row"
+                        data-name="<%= (a.name || '').toLowerCase() %>"
+                        data-category="<%= a.category || '' %>"
+                        data-status="<%= a.active !== false ? 'active' : 'inactive' %>">
+                        <div class="card h-100 border-0 shadow-sm overflow-hidden">
+                            <div class="position-relative">
+                                <% if (a.image) { %>
+                                    <img src="<%= typeof imageBaseUrl !== 'undefined' ? imageBaseUrl : '' %><%= a.image %>"
+                                        class="card-img-top"
+                                        alt="<%= a.name %>"
+                                        loading="lazy"
+                                        decoding="async"
+                                        style="height: 180px; object-fit: cover;">
+                                <% } else { %>
+                                    <div class="bg-light d-flex align-items-center justify-content-center"
+                                        style="height: 180px;">
+                                        <span class="text-muted small">No image</span>
+                                    </div>
+                                <% } %>
+                                <% if (a.category) { %>
+                                    <span class="position-absolute top-0 start-0 m-2 badge bg-dark bg-opacity-75">
+                                        <%= a.category %>
+                                    </span>
+                                <% } %>
+                                <span class="position-absolute top-0 end-0 m-2 badge <%= a.active !== false ? 'bg-success' : 'bg-secondary' %>">
+                                    <%= a.active !== false ? 'Active' : 'Inactive' %>
+                                </span>
+                            </div>
+                            <div class="card-body d-flex flex-column">
+                                <h5 class="card-title mb-1 text-truncate">
+                                    <a href="/attraction/<%= a.id %>" class="text-decoration-none fw-semibold" target="_blank">
+                                        <%= a.name %>
+                                    </a>
+                                </h5>
+                                <% if (a.uniqueHighlight || a.desc) { %>
+                                    <p class="card-text text-muted small mb-3">
+                                        <%= (a.uniqueHighlight || a.desc || '').length > 130
+                                            ? (a.uniqueHighlight || a.desc || '').substring(0, 127) + '...'
+                                            : (a.uniqueHighlight || a.desc || '') %>
+                                    </p>
+                                <% } %>
+                                <div class="mt-auto d-flex flex-wrap gap-2">
+                                    <a href="/admin/attractions/edit/<%= a.id %>" class="btn btn-sm btn-outline-primary">
+                                        Edit
+                                    </a>
+                                    <form action="/admin/attractions/toggle-active/<%= a.id %>" method="post" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                            <%= a.active !== false ? 'Set Inactive' : 'Set Active' %>
+                                        </button>
+                                    </form>
+                                    <form action="/admin/attractions/delete/<%= a.id %>" method="post" class="d-inline"
+                                        onsubmit="var f=this; appConfirm('Delete this attraction? This cannot be undone.', function(){ f.submit(); }); return false;">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <% }); %>
+                </div>
+            </div>
+        </div>
+        <div id="attractionsNoResults" class="card-body text-center py-5 text-muted" style="display: none;">
+            <i class="fas fa-search fa-2x mb-2 opacity-50"></i>
+            <p class="mb-0">No attractions match your search or filters.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var searchEl = document.getElementById('attractionsSearch');
+    var categoryEl = document.getElementById('attractionsCategory');
+    var statusEl = document.getElementById('attractionsStatus');
+    var resetBtn = document.getElementById('attractionsFilterReset');
+    var rows = document.querySelectorAll('.attraction-row');
+    var tableBody = document.getElementById('attractionsTableBody');
+    var noResults = document.getElementById('attractionsNoResults');
+    var visibleCountEl = document.getElementById('attractionsVisibleCount');
+    var totalCountEl = document.getElementById('attractionsTotalCount');
+
+    function applyFilters() {
+        var q = (searchEl.value || '').trim().toLowerCase();
+        var cat = (categoryEl.value || '').trim();
+        var status = (statusEl.value || '').trim();
+        var visible = 0;
+
+        rows.forEach(function(row) {
+            var name = row.getAttribute('data-name') || '';
+            var rowCat = row.getAttribute('data-category') || '';
+            var rowStatus = row.getAttribute('data-status') || '';
+            var matchSearch = !q || name.indexOf(q) !== -1 || rowCat.toLowerCase().indexOf(q) !== -1;
+            var matchCat = !cat || rowCat === cat;
+            var matchStatus = !status || rowStatus === status;
+            var show = matchSearch && matchCat && matchStatus;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+
+        visibleCountEl.textContent = visible;
+        tableBody.style.display = visible > 0 ? '' : 'none';
+        var tableWrap = tableBody.closest('.table-responsive');
+        if (tableWrap) tableWrap.style.display = visible > 0 ? '' : 'none';
+        noResults.style.display = visible > 0 ? 'none' : 'block';
+    }
+
+    searchEl.addEventListener('input', applyFilters);
+    searchEl.addEventListener('keyup', applyFilters);
+    categoryEl.addEventListener('change', applyFilters);
+    statusEl.addEventListener('change', applyFilters);
+
+    resetBtn.addEventListener('click', function() {
+        searchEl.value = '';
+        categoryEl.value = '';
+        statusEl.value = '';
+        applyFilters();
+        searchEl.focus();
+    });
+
+    applyFilters();
+})();
+</script>
+
+<%- include('../partials/footer') %>
