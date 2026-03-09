@@ -2403,9 +2403,22 @@ function parseItemsFromBodyGroup(body, prefix, existingItems) {
 
 function parseAttractionFromBody(body, existing, uploaded) {
     const id = (body.id || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || (existing && existing.id);
-    const lng = parseFloat(body.lng);
-    const lat = parseFloat(body.lat);
-    const coordinates = (Number.isFinite(lng) && Number.isFinite(lat)) ? [lng, lat] : (existing && existing.coordinates) || [];
+    const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+    const bodyTrimOrUndef = (key) => {
+        if (!hasOwn(body, key)) return undefined;
+        return String(body[key] ?? '').trim();
+    };
+
+    const lngRaw = bodyTrimOrUndef('lng');
+    const latRaw = bodyTrimOrUndef('lat');
+    const lng = lngRaw !== undefined ? parseFloat(lngRaw) : NaN;
+    const lat = latRaw !== undefined ? parseFloat(latRaw) : NaN;
+    const wantsClearCoords = (lngRaw !== undefined && latRaw !== undefined && lngRaw === '' && latRaw === '');
+    const coordinates = wantsClearCoords
+        ? []
+        : (Number.isFinite(lng) && Number.isFinite(lat))
+            ? [lng, lat]
+            : (existing && existing.coordinates) || [];
     const rooms = parseItemsFromBodyGroup(body, 'rooms', existing && existing.rooms);
     const menu = parseItemsFromBodyGroup(body, 'menu', existing && existing.menu);
     const addons = parseItemsFromBodyGroup(body, 'addons', existing && existing.addons);
@@ -2418,24 +2431,37 @@ function parseAttractionFromBody(body, existing, uploaded) {
     const active = body.active === 'on' || body.active === 'true' || body.active === true;
     const base = existing ? { ...existing } : {};
     const image = (uploaded && uploaded.image) || (body.image || '').trim() || base.image || '';
+
+    const nameVal = bodyTrimOrUndef('name');
+    const categoryVal = bodyTrimOrUndef('category');
+    const descVal = bodyTrimOrUndef('desc');
+    const highlightsVal = bodyTrimOrUndef('highlights');
+    const uniqueHighlightVal = bodyTrimOrUndef('uniqueHighlight');
+    const openingHoursVal = bodyTrimOrUndef('openingHours');
+    const entranceFeesVal = bodyTrimOrUndef('entranceFees');
+    const visitorTipsVal = bodyTrimOrUndef('visitorTips');
+    const facebookVal = bodyTrimOrUndef('facebook');
+    const phoneVal = bodyTrimOrUndef('phone');
+    const emailVal = bodyTrimOrUndef('email');
+
     return {
         ...base,
         id: id || base.id,
-        name: (body.name || '').trim() || base.name,
-        category: (body.category || '').trim() || base.category,
+        name: (nameVal !== undefined ? nameVal : base.name),
+        category: (categoryVal !== undefined ? categoryVal : base.category),
         image: image || base.image,
-        desc: (body.desc || '').trim() || base.desc,
-        highlights: (body.highlights || '').trim() || base.highlights,
-        uniqueHighlight: (body.uniqueHighlight || '').trim() || base.uniqueHighlight,
+        desc: (descVal !== undefined ? descVal : base.desc),
+        highlights: (highlightsVal !== undefined ? highlightsVal : base.highlights),
+        uniqueHighlight: (uniqueHighlightVal !== undefined ? uniqueHighlightVal : base.uniqueHighlight),
         coordinates,
         gallery: Array.isArray(gallery) ? gallery : (base.gallery || []),
         active,
-        openingHours: (body.openingHours || '').trim() || base.openingHours,
-        entranceFees: (body.entranceFees || '').trim() || base.entranceFees,
-        visitorTips: (body.visitorTips || '').trim() || base.visitorTips,
-        facebook: (body.facebook || '').trim() || base.facebook,
-        phone: (body.phone || '').trim() || base.phone,
-        email: (body.email || '').trim() || base.email,
+        openingHours: (openingHoursVal !== undefined ? openingHoursVal : base.openingHours),
+        entranceFees: (entranceFeesVal !== undefined ? entranceFeesVal : base.entranceFees),
+        visitorTips: (visitorTipsVal !== undefined ? visitorTipsVal : base.visitorTips),
+        facebook: (facebookVal !== undefined ? facebookVal : base.facebook),
+        phone: (phoneVal !== undefined ? phoneVal : base.phone),
+        email: (emailVal !== undefined ? emailVal : base.email),
         rooms,
         menu,
         addons,
