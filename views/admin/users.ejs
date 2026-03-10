@@ -25,6 +25,7 @@
                                 <th class="ps-3">#</th>
                                 <th>Name</th>
                                 <th>Email</th>
+                                <th class="text-nowrap">Last login</th>
                                 <th class="text-nowrap">Role</th>
                                 <th class="text-nowrap">Status</th>
                                 <th class="text-nowrap pe-3">Actions</th>
@@ -39,6 +40,13 @@
                                     </td>
                                     <td>
                                         <span class="text-muted"><%= u.email || '—' %></span>
+                                    </td>
+                                    <td class="text-muted small text-nowrap">
+                                        <% if (u.lastLoginAt) { %>
+                                            <%= new Date(u.lastLoginAt).toLocaleString() %>
+                                        <% } else { %>
+                                            —
+                                        <% } %>
                                     </td>
                                     <td>
                                         <form action="/admin/users/<%= u.uid %>/role" method="post" class="d-inline">
@@ -71,6 +79,12 @@
                                                 <button type="submit" class="btn btn-sm btn-outline-danger">Ban</button>
                                             </form>
                                         <% } %>
+
+                                        <form action="/admin/users/<%= u.uid %>/delete" method="post" class="d-inline ms-1 delete-user-form"
+                                            data-user-email="<%= (u.email || '').replace(/"/g, '&quot;') %>">
+                                            <input type="hidden" name="confirm" value="">
+                                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                        </form>
                                     </td>
                                 </tr>
                             <% }); %>
@@ -90,3 +104,41 @@
 
 <%- include('../partials/footer') %>
 
+<script>
+    (function() {
+        function wireDeletes() {
+            document.querySelectorAll('form.delete-user-form').forEach(function(form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    var email = form.getAttribute('data-user-email') || 'this user';
+                    var hidden = form.querySelector('input[name="confirm"]');
+                    if (hidden) hidden.value = '';
+
+                    var msg = 'WARNING: This will permanently delete the account for ' + email + '.\n\nType DELETE to confirm.';
+                    if (typeof window.appPrompt !== 'function') {
+                        // Fallback to native prompt if modal JS isn't available
+                        var v = window.prompt(msg, '');
+                        if (String(v || '').trim() === 'DELETE') {
+                            if (hidden) hidden.value = 'DELETE';
+                            form.submit();
+                        }
+                        return;
+                    }
+
+                    window.appPrompt(msg, '', function(value) {
+                        var v = String(value || '').trim();
+                        if (v !== 'DELETE') {
+                            if (typeof window.appAlert === 'function') window.appAlert('Delete cancelled. You must type DELETE exactly to confirm.');
+                            return;
+                        }
+                        if (hidden) hidden.value = 'DELETE';
+                        form.submit();
+                    }, function() {});
+                });
+            });
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireDeletes);
+        else wireDeletes();
+    })();
+</script>
