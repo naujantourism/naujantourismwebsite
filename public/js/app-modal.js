@@ -19,6 +19,17 @@
         };
     }
 
+    function shake(el) {
+        if (!el) return;
+        el.classList.remove('app-modal-shake');
+        // Force reflow so animation restarts
+        void el.offsetWidth;
+        el.classList.add('app-modal-shake');
+        setTimeout(function () {
+            el.classList.remove('app-modal-shake');
+        }, 450);
+    }
+
     function showModal(opts) {
         var modal = getModal();
         var el = document.getElementById('appModal');
@@ -32,6 +43,7 @@
         var defaultValue = opts.defaultValue != null ? String(opts.defaultValue) : '';
         var onOk = typeof opts.onOk === 'function' ? opts.onOk : function () {};
         var onCancel = typeof opts.onCancel === 'function' ? opts.onCancel : function () {};
+        var validate = typeof opts.validate === 'function' ? opts.validate : null; // (value) => true | false | "error message"
 
         els.message.textContent = message;
         els.promptWrap.classList.toggle('d-none', mode !== 'prompt');
@@ -51,6 +63,19 @@
 
         function doOk() {
             if (resolved) return;
+
+            if (mode === 'prompt' && validate) {
+                var raw = els.input.value;
+                var result = validate(raw);
+                if (result !== true) {
+                    shake(els.input);
+                    try {
+                        if (els.input && els.input.offsetParent) els.input.focus();
+                    } catch (e) {}
+                    return;
+                }
+            }
+
             resolved = true;
             cleanup();
             el.removeEventListener('hidden.bs.modal', onHidden);
@@ -130,6 +155,18 @@
             mode: 'prompt',
             message: message,
             defaultValue: defaultValue != null ? defaultValue : '',
+            onOk: onOk || function () {},
+            onCancel: onCancel || function () {}
+        });
+    };
+
+    // Like appPrompt, but keeps the modal open and shakes input when validate() fails.
+    window.appPromptValidate = function (message, defaultValue, validate, onOk, onCancel) {
+        showModal({
+            mode: 'prompt',
+            message: message,
+            defaultValue: defaultValue != null ? defaultValue : '',
+            validate: validate,
             onOk: onOk || function () {},
             onCancel: onCancel || function () {}
         });
