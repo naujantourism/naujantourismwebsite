@@ -43,7 +43,7 @@
                                     </td>
                                     <td class="text-muted small text-nowrap">
                                         <% if (u.lastLoginAt) { %>
-                                            <%= new Date(u.lastLoginAt).toLocaleString() %>
+                                            <span class="js-last-login" data-iso="<%= u.lastLoginAt %>"><%= u.lastLoginAt %></span>
                                         <% } else { %>
                                             —
                                         <% } %>
@@ -125,20 +125,50 @@
                         return;
                     }
 
-                    window.appPrompt(msg, '', function(value) {
-                        var v = String(value || '').trim();
-                        if (v !== 'DELETE') {
-                            if (typeof window.appAlert === 'function') window.appAlert('Delete cancelled. You must type DELETE exactly to confirm.');
-                            return;
-                        }
-                        if (hidden) hidden.value = 'DELETE';
-                        form.submit();
-                    }, function() {});
+                    if (typeof window.appPromptValidate === 'function') {
+                        window.appPromptValidate(msg, '', function(value) {
+                            return String(value || '').trim() === 'DELETE';
+                        }, function() {
+                            if (hidden) hidden.value = 'DELETE';
+                            form.submit();
+                        }, function() {});
+                    } else {
+                        window.appPrompt(msg, '', function(value) {
+                            var v = String(value || '').trim();
+                            if (v !== 'DELETE') {
+                                if (typeof window.appAlert === 'function') window.appAlert('Incorrect input. Type DELETE to confirm.');
+                                return;
+                            }
+                            if (hidden) hidden.value = 'DELETE';
+                            form.submit();
+                        }, function() {});
+                    }
                 });
             });
         }
 
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireDeletes);
-        else wireDeletes();
+        function formatLastLoginLocal() {
+            document.querySelectorAll('.js-last-login[data-iso]').forEach(function(el) {
+                var iso = el.getAttribute('data-iso') || '';
+                if (!iso) return;
+                var d = new Date(iso);
+                if (isNaN(d.getTime())) return;
+                try {
+                    el.textContent = d.toLocaleString();
+                } catch (e) {
+                    el.textContent = d.toString();
+                }
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                wireDeletes();
+                formatLastLoginLocal();
+            });
+        } else {
+            wireDeletes();
+            formatLastLoginLocal();
+        }
     })();
 </script>
