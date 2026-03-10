@@ -1880,6 +1880,16 @@ app.post('/login', authLimiter, async (req, res) => {
         req.session.name = user.name || user.email;
         req.session.role = isAdmin ? ROLE_ADMIN : ROLE_USER;
         if (!isAdmin && isAdminPath(redirectTo)) redirectTo = '/';
+
+        // Track last login time for admin visibility
+        try {
+            await usersRef.child(user.uid).update({
+                lastLoginAt: new Date().toISOString()
+            });
+        } catch (e) {
+            console.warn('Could not update lastLoginAt:', e && e.message ? e.message : e);
+        }
+
         req.session.save((err) => {
             if (err) return res.redirect('/login?error=error&redirect=' + encodeURIComponent(redirectTo));
             res.redirect(redirectTo);
@@ -2840,7 +2850,8 @@ app.get('/admin/users', requireAdmin, async (req, res) => {
                 email: user.email || '',
                 role: isAdmin ? ROLE_ADMIN : ROLE_USER,
                 banned: user.banned === true,
-                verified: user.verified !== false
+                verified: user.verified !== false,
+                lastLoginAt: user.lastLoginAt || null
             };
         }));
 
@@ -2926,6 +2937,40 @@ app.post('/admin/users/:uid/unban', requireAdmin, async (req, res) => {
     } catch (err) {
         console.error('Error unbanning user:', err);
     }
+    res.redirect('/admin/users');
+});
+
+app.post('/admin/users/:uid/delete', requireAdmin, async (req, res) => {
+    const { uid } = req.params;
+    const confirm = (req.body && req.body.confirm) ? String(req.body.confirm).trim() : '';
+
+    // Do not allow an admin to delete themselves
+    if (uid === req.session.userId) {
+        return res.redirect('/admin/users');
+    }
+
+    // Require explicit confirmation on server side too
+    if (confirm !== 'DELETE') {
+        return res.redirect('/admin/users');
+    }
+
+    try {
+        const snap = await usersRef.child(uid).once('value');
+        if (!snap.exists()) {
+            return res.redirect('/admin/users');
+        }
+
+        const user = snap.val() || {};
+        const targetIsAdmin = await isRole(user, ROLE_ADMIN);
+        if (targetIsAdmin) {
+            return res.redirect('/admin/users');
+        }
+
+        await usersRef.child(uid).remove();
+    } catch (err) {
+        console.error('Error deleting user:', err);
+    }
+
     res.redirect('/admin/users');
 });
 
