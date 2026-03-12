@@ -202,11 +202,50 @@
     wireFavoriteClicks();
     initRatings();
     wireRatingClicks();
+    initLogoutConfirm();
     initScrollReveal();
     initCounterAnimations();
     initSmoothNavLinks();
     initBackToTop();
     initPasswordToggles();
+  }
+
+  function initLogoutConfirm() {
+    var form = document.querySelector('form.js-logout-form[action="/logout"]');
+    if (!form || typeof window.appConfirm !== 'function') return;
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var forgetInput = form.querySelector('input[name="forgetDevice"]');
+      if (forgetInput) forgetInput.value = '0';
+
+      var hasTrusted = window.__hasTrustedDevice === true || window.__hasTrustedDevice === 'true';
+      var extraNode = null;
+
+      if (hasTrusted) {
+        extraNode = function () {
+          var wrap = document.createElement('div');
+          wrap.className = 'form-check';
+          wrap.innerHTML =
+            '<input class="form-check-input" type="checkbox" id="forgetThisDevice">' +
+            '<label class="form-check-label small" for="forgetThisDevice">Forget this device (require email code next time)</label>';
+          return wrap;
+        };
+      }
+
+      var confirmFn = typeof window.appConfirmExtra === 'function' ? window.appConfirmExtra : null;
+      var show = confirmFn
+        ? function (msg, extra, onOk, onCancel) { confirmFn(msg, extra, onOk, onCancel); }
+        : function (msg, extra, onOk, onCancel) { window.appConfirm(msg, onOk, onCancel); };
+
+      show('Are you sure you want to log out?', extraNode, function () {
+        if (hasTrusted) {
+          var cb = document.getElementById('forgetThisDevice');
+          if (cb && cb.checked && forgetInput) forgetInput.value = '1';
+        }
+        form.submit();
+      });
+    });
   }
 
   // --- Counter animations for stat numbers ---
