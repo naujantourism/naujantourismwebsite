@@ -421,9 +421,63 @@ async function createTrustedDevice(uid) {
     return `${deviceId}.${validator}`;
 }
 
+function base64UrlEncode(s) {
+    return Buffer.from(String(s), 'utf8')
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+}
+
+function base64UrlDecodeToString(s) {
+    const str = String(s || '');
+    const padLen = (4 - (str.length % 4)) % 4;
+    const padded = str.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat(padLen);
+    return Buffer.from(padded, 'base64').toString('utf8');
+}
+
+function signTrustedPayload(payload) {
+    const secret = process.env.SESSION_SECRET || 'naujan-tourism-dev-secret-change-in-production';
+    return crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 40);
+}
+
+function createTrustedDeviceTokenV2(uid) {
+    const now = Date.now();
+    const expiresAt = now + TRUSTED_DEVICE_TTL_MS;
+    const nonce = crypto.randomBytes(8).toString('hex');
+    const payload = base64UrlEncode(`${uid}|${expiresAt}|${nonce}`);
+    const sig = signTrustedPayload(payload);
+    return `v2.${payload}.${sig}`;
+}
+
+function isTrustedDeviceTokenV2(uid, token) {
+    if (!token || typeof token !== 'string') return false;
+    if (!token.startsWith('v2.')) return false;
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const payload = parts[1];
+    const sig = parts[2];
+    if (!payload || !sig) return false;
+    if (signTrustedPayload(payload) !== sig) return false;
+    try {
+        const decoded = base64UrlDecodeToString(payload);
+        const [tokenUid, expRaw] = decoded.split('|');
+        const exp = Number(expRaw);
+        if (!tokenUid || tokenUid !== uid) return false;
+        if (!Number.isFinite(exp) || exp <= Date.now()) return false;
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function isTrustedDevice(uid, req) {
     const raw = getCookie(req, 'nt_td');
     if (!raw || typeof raw !== 'string') return false;
+
+    // v2 token: self-contained, signed (works even if DB writes are blocked)
+    if (isTrustedDeviceTokenV2(uid, raw)) return true;
+
     const [deviceId, validator] = raw.split('.');
     if (!deviceId || !validator) return false;
     try {
@@ -2095,7 +2149,8 @@ app.post('/verify-otp', authLimiter, async (req, res) => {
         if (pending.rememberMe) req.session.cookie.maxAge = REMEMBER_ME_TTL_MS;
 
         if (pending.rememberDevice) {
-            const token = await createTrustedDevice(pending.uid);
+            // Prefer v2 signed token (no DB dependency). Still accept v1 tokens for backward compatibility.
+            const token = createTrustedDeviceTokenV2(pending.uid);
             const secure = isRequestSecure(req);
             res.cookie('nt_td', token, {
                 path: '/',
