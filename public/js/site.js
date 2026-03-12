@@ -243,6 +243,7 @@
           var cb = document.getElementById('forgetThisDevice');
           if (cb && cb.checked && forgetInput) forgetInput.value = '1';
         }
+        if (typeof window.showProcessLoader === 'function') window.showProcessLoader('Logging out...');
         form.submit();
       });
     });
