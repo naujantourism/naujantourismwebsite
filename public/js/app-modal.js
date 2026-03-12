@@ -12,6 +12,7 @@
     function getElements() {
         return {
             message: document.getElementById('appModalMessage'),
+            extraWrap: document.getElementById('appModalExtraWrap'),
             promptWrap: document.getElementById('appModalPromptWrap'),
             input: document.getElementById('appModalInput'),
             btnOk: document.getElementById('appModalOk'),
@@ -46,6 +47,19 @@
         var validate = typeof opts.validate === 'function' ? opts.validate : null; // (value) => true | false | "error message"
 
         els.message.textContent = message;
+        if (els.extraWrap) {
+            els.extraWrap.innerHTML = '';
+            els.extraWrap.classList.add('d-none');
+            if (opts.extraNode && typeof opts.extraNode === 'function') {
+                try {
+                    var node = opts.extraNode();
+                    if (node) {
+                        els.extraWrap.appendChild(node);
+                        els.extraWrap.classList.remove('d-none');
+                    }
+                } catch (e) {}
+            }
+        }
         els.promptWrap.classList.toggle('d-none', mode !== 'prompt');
         els.btnCancel.style.display = mode === 'alert' ? 'none' : '';
 
@@ -137,6 +151,17 @@
         showModal({
             mode: 'confirm',
             message: message,
+            onOk: onOk || function () {},
+            onCancel: onCancel || function () {}
+        });
+    };
+
+    // Confirm, with optional extraNode() content appended inside the modal body.
+    window.appConfirmExtra = function (message, extraNode, onOk, onCancel) {
+        showModal({
+            mode: 'confirm',
+            message: message,
+            extraNode: extraNode,
             onOk: onOk || function () {},
             onCancel: onCancel || function () {}
         });
