@@ -244,6 +244,22 @@ h1, h2, h3, h4, h5, h6, .navbar-brand {
     animation: zoomEffect 20s infinite alternate;
 }
 
+/* YouTube video background - cover hero, highest quality, autoplay, loop */
+.hero-video-wrap {
+    z-index: 0;
+}
+
+.hero-video-iframe {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100vw, 177.78vh);
+    height: max(56.25vw, 100vh);
+    border: none;
+    pointer-events: none;
+}
+
 .carousel-inner, .carousel-item {
     height: 100%;
 }
