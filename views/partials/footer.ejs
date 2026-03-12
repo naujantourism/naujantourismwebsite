@@ -69,8 +69,6 @@
         if (loginForm) loginForm.addEventListener('submit', function() { window.showProcessLoader('Signing in...'); });
         var registerForm = document.querySelector('form[action="/register"]');
         if (registerForm) registerForm.addEventListener('submit', function() { window.showProcessLoader('Creating account...'); });
-        var logoutForm = document.querySelector('form[action="/logout"]');
-        if (logoutForm) logoutForm.addEventListener('submit', function() { window.showProcessLoader('Logging out...'); });
     })();
 </script>
 <script src="/js/site.js"></script>
