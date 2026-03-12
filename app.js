@@ -120,6 +120,8 @@ const attractionsRef = db.ref('/attractions');
 const reviewsRef = db.ref('/reviews');
 const reportsRef = db.ref('/reports');
 const categoriesRef = db.ref('/categories');
+const loginOtpsRef = db.ref('/loginOtps');
+const trustedDevicesRef = db.ref('/trustedDevices');
 
 // --- Production-safe sessions (store in Firebase RTDB) ---
 const sessionsRef = db.ref('/sessions');
@@ -263,6 +265,10 @@ const VERIFICATION_TOKEN_BYTES = 32;
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RESET_TOKEN_BYTES = 32;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const LOGIN_OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const LOGIN_OTP_MAX_ATTEMPTS = 5;
+const TRUSTED_DEVICE_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+const REMEMBER_ME_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 const mailTransport = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -330,6 +336,107 @@ If you did not request this, you can safely ignore this email.`,
 <p>Or copy and paste this link into your browser:<br><code>${resetUrl}</code></p>
 <p>If you did not request this, you can safely ignore this email.</p>`
     });
+}
+
+function generateOtpCode() {
+    // 5 chars, letters/numbers, avoids ambiguous chars (0/O, 1/I)
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let out = '';
+    for (let i = 0; i < 5; i++) {
+        out += alphabet[crypto.randomInt(0, alphabet.length)];
+    }
+    return out;
+}
+
+function getCookie(req, name) {
+    const raw = req && req.headers ? req.headers.cookie : '';
+    if (!raw || typeof raw !== 'string') return null;
+    const parts = raw.split(';');
+    for (const part of parts) {
+        const idx = part.indexOf('=');
+        if (idx < 0) continue;
+        const k = part.slice(0, idx).trim();
+        if (k !== name) continue;
+        const v = part.slice(idx + 1).trim();
+        try {
+            return decodeURIComponent(v);
+        } catch {
+            return v;
+        }
+    }
+    return null;
+}
+
+function isRequestSecure(req) {
+    if (req && req.secure) return true;
+    const xfProto = req && req.headers ? req.headers['x-forwarded-proto'] : null;
+    if (typeof xfProto === 'string' && xfProto.toLowerCase().includes('https')) return true;
+    return false;
+}
+
+async function sendLoginOtpEmail(toEmail, otpCode) {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.log('Login OTP for', toEmail, ':', otpCode);
+        return;
+    }
+
+    const fromAddress = process.env.EMAIL_FROM || '"Naujan Tourism" <no-reply@naujantourism.local>';
+
+    await mailTransport.sendMail({
+        from: fromAddress,
+        to: toEmail,
+        subject: 'Your login code for Visit Naujan',
+        text: `Your one-time login code is: ${otpCode}
+
+This code expires in 10 minutes.
+
+If you did not try to log in, you can ignore this email.`,
+        html: `<p>Your one-time login code is:</p>
+<p style="font-size:22px;letter-spacing:3px;font-weight:700;"><code>${escapeHtml(otpCode)}</code></p>
+<p>This code expires in <strong>10 minutes</strong>.</p>
+<p>If you did not try to log in, you can ignore this email.</p>`
+    });
+}
+
+async function createTrustedDevice(uid) {
+    const deviceId = crypto.randomBytes(8).toString('hex'); // selector
+    const validator = crypto.randomBytes(32).toString('hex'); // secret
+    const now = Date.now();
+    const expiresAt = now + TRUSTED_DEVICE_TTL_MS;
+    const validatorHash = await bcrypt.hash(validator, SALT_ROUNDS);
+    await trustedDevicesRef.child(uid).child(deviceId).set({
+        validatorHash,
+        createdAt: now,
+        lastUsedAt: now,
+        expiresAt
+    });
+    return `${deviceId}.${validator}`;
+}
+
+async function isTrustedDevice(uid, req) {
+    const raw = getCookie(req, 'nt_td');
+    if (!raw || typeof raw !== 'string') return false;
+    const [deviceId, validator] = raw.split('.');
+    if (!deviceId || !validator) return false;
+    try {
+        const snap = await trustedDevicesRef.child(uid).child(deviceId).once('value');
+        const rec = snap.val();
+        if (!rec || typeof rec !== 'object') return false;
+        if (!rec.expiresAt || typeof rec.expiresAt !== 'number' || rec.expiresAt <= Date.now()) return false;
+        if (!rec.validatorHash || typeof rec.validatorHash !== 'string') return false;
+        const ok = await bcrypt.compare(validator, rec.validatorHash);
+        if (!ok) return false;
+        trustedDevicesRef.child(uid).child(deviceId).update({ lastUsedAt: Date.now() }).catch(() => {});
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function clearTrustedDeviceCookie(res) {
+    // Best-effort clear in both secure and non-secure modes
+    try { res.cookie('nt_td', '', { httpOnly: true, sameSite: 'lax', secure: true, maxAge: 0 }); } catch {}
+    try { res.cookie('nt_td', '', { httpOnly: true, sameSite: 'lax', secure: false, maxAge: 0 }); } catch {}
 }
 
 const CONTACT_EMAIL_TO = 'naujantourismwebsite@gmail.com';
@@ -1844,6 +1951,8 @@ app.get('/login', (req, res) => {
 
 app.post('/login', authLimiter, async (req, res) => {
     const { email, password } = req.body || {};
+    const rememberMe = req.body && (req.body.rememberMe === 'on' || req.body.rememberMe === 'true' || req.body.rememberMe === true);
+    const rememberDevice = req.body && (req.body.rememberDevice === 'on' || req.body.rememberDevice === 'true' || req.body.rememberDevice === true);
     let redirectTo = safeRedirectUrl((req.body && req.body.redirect) ? req.body.redirect : '/');
     try {
         const user = await findUserByEmail(email);
@@ -1875,11 +1984,45 @@ app.post('/login', authLimiter, async (req, res) => {
             return res.redirect('/login?error=unverified&redirect=' + encodeURIComponent(redirectTo));
         }
 
-        req.session.userId = user.uid;
-        req.session.email = user.email;
-        req.session.name = user.name || user.email;
-        req.session.role = isAdmin ? ROLE_ADMIN : ROLE_USER;
-        if (!isAdmin && isAdminPath(redirectTo)) redirectTo = '/';
+        if (!isAdmin && await isTrustedDevice(user.uid, req)) {
+            req.session.userId = user.uid;
+            req.session.email = user.email;
+            req.session.name = user.name || user.email;
+            req.session.role = isAdmin ? ROLE_ADMIN : ROLE_USER;
+            if (rememberMe) req.session.cookie.maxAge = REMEMBER_ME_TTL_MS;
+            if (!isAdmin && isAdminPath(redirectTo)) redirectTo = '/';
+        } else {
+            const otpCode = generateOtpCode();
+            const codeHash = await bcrypt.hash(otpCode, SALT_ROUNDS);
+            const now = Date.now();
+            await loginOtpsRef.child(user.uid).set({
+                codeHash,
+                attempts: 0,
+                createdAt: now,
+                expiresAt: now + LOGIN_OTP_TTL_MS
+            });
+
+            try {
+                await sendLoginOtpEmail(user.email, otpCode);
+            } catch (err) {
+                console.warn('Could not send login OTP email:', err.message);
+            }
+
+            req.session.pendingOtp = {
+                uid: user.uid,
+                email: user.email,
+                name: user.name || user.email,
+                role: isAdmin ? ROLE_ADMIN : ROLE_USER,
+                redirectTo,
+                rememberMe,
+                rememberDevice
+            };
+
+            return req.session.save((err) => {
+                if (err) return res.redirect('/login?error=error&redirect=' + encodeURIComponent(redirectTo));
+                res.redirect('/verify-otp');
+            });
+        }
 
         // Track last login time for admin visibility
         try {
@@ -1896,6 +2039,79 @@ app.post('/login', authLimiter, async (req, res) => {
         });
     } catch (e) {
         return res.redirect('/login?error=error&redirect=' + encodeURIComponent(redirectTo));
+    }
+});
+
+app.get('/verify-otp', (req, res) => {
+    const pending = req.session && req.session.pendingOtp ? req.session.pendingOtp : null;
+    if (!pending || !pending.uid) return res.redirect('/login');
+    res.render('verify-otp', {
+        title: 'Verify Login - Naujan Tourism',
+        error: req.query.error,
+        email: pending.email
+    });
+});
+
+app.post('/verify-otp', authLimiter, async (req, res) => {
+    const pending = req.session && req.session.pendingOtp ? req.session.pendingOtp : null;
+    if (!pending || !pending.uid) return res.redirect('/login');
+
+    const code = (req.body && req.body.code ? String(req.body.code) : '').trim().toUpperCase();
+    if (!code || code.length !== 5) return res.redirect('/verify-otp?error=invalid');
+
+    try {
+        const snap = await loginOtpsRef.child(pending.uid).once('value');
+        const otp = snap.val();
+        const now = Date.now();
+        if (!otp || typeof otp !== 'object' || !otp.codeHash || !otp.expiresAt || otp.expiresAt <= now) {
+            return res.redirect('/verify-otp?error=expired');
+        }
+        if ((otp.attempts || 0) >= LOGIN_OTP_MAX_ATTEMPTS) {
+            return res.redirect('/verify-otp?error=locked');
+        }
+
+        const ok = await bcrypt.compare(code, otp.codeHash);
+        if (!ok) {
+            loginOtpsRef.child(pending.uid).update({ attempts: (otp.attempts || 0) + 1 }).catch(() => {});
+            return res.redirect('/verify-otp?error=invalid');
+        }
+
+        await loginOtpsRef.child(pending.uid).remove().catch(() => {});
+
+        req.session.userId = pending.uid;
+        req.session.email = pending.email;
+        req.session.name = pending.name;
+        req.session.role = pending.role;
+        delete req.session.pendingOtp;
+
+        if (pending.rememberMe) req.session.cookie.maxAge = REMEMBER_ME_TTL_MS;
+
+        if (pending.rememberDevice) {
+            const token = await createTrustedDevice(pending.uid);
+            const secure = isRequestSecure(req);
+            res.cookie('nt_td', token, {
+                httpOnly: true,
+                sameSite: 'lax',
+                secure,
+                maxAge: TRUSTED_DEVICE_TTL_MS
+            });
+        }
+
+        let redirectTo = safeRedirectUrl(pending.redirectTo || '/');
+        if (pending.role !== ROLE_ADMIN && isAdminPath(redirectTo)) redirectTo = '/';
+
+        try {
+            await usersRef.child(pending.uid).update({ lastLoginAt: new Date().toISOString() });
+        } catch (e) {
+            console.warn('Could not update lastLoginAt:', e && e.message ? e.message : e);
+        }
+
+        return req.session.save((err) => {
+            if (err) return res.redirect('/login?error=error&redirect=' + encodeURIComponent(redirectTo));
+            res.redirect(redirectTo);
+        });
+    } catch (e) {
+        return res.redirect('/verify-otp?error=error');
     }
 });
 
@@ -2083,6 +2299,7 @@ app.get('/verify-email', async (req, res) => {
 
 app.post('/logout', (req, res) => {
     req.session.destroy(() => {});
+    clearTrustedDeviceCookie(res);
     res.redirect('/');
 });
 
