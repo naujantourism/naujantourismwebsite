@@ -443,8 +443,8 @@ async function isTrustedDevice(uid, req) {
 
 function clearTrustedDeviceCookie(res) {
     // Best-effort clear in both secure and non-secure modes
-    try { res.cookie('nt_td', '', { httpOnly: true, sameSite: 'lax', secure: true, maxAge: 0 }); } catch {}
-    try { res.cookie('nt_td', '', { httpOnly: true, sameSite: 'lax', secure: false, maxAge: 0 }); } catch {}
+    try { res.cookie('nt_td', '', { path: '/', httpOnly: true, sameSite: 'lax', secure: true, maxAge: 0 }); } catch {}
+    try { res.cookie('nt_td', '', { path: '/', httpOnly: true, sameSite: 'lax', secure: false, maxAge: 0 }); } catch {}
 }
 
 const CONTACT_EMAIL_TO = 'naujantourismwebsite@gmail.com';
@@ -2098,6 +2098,7 @@ app.post('/verify-otp', authLimiter, async (req, res) => {
             const token = await createTrustedDevice(pending.uid);
             const secure = isRequestSecure(req);
             res.cookie('nt_td', token, {
+                path: '/',
                 httpOnly: true,
                 sameSite: 'lax',
                 secure,
