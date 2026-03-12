@@ -2,21 +2,16 @@
 
 <header class="hero-section position-relative overflow-hidden">
     
-    <div id="heroCarousel" class="carousel slide carousel-fade position-absolute top-0 start-0 w-100 h-100" data-bs-ride="carousel">
-        <div class="carousel-inner w-100 h-100">
-            <div class="carousel-item active h-100">
-                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/lake.jpg');"></div>
-            </div>
-            <div class="carousel-item h-100">
-                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/simbahan/main.jpg');"></div>
-            </div>
-            <div class="carousel-item h-100">
-                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/liwasang.jpg');"></div>
-            </div>
-            <div class="carousel-item h-100">
-                <div class="hero-bg-img" style="background-image: url('<%= typeof imageBaseUrl !== "undefined" ? imageBaseUrl : "" %>/images/333-steps.jpg');"></div>
-            </div>
-        </div>
+    <div class="hero-video-wrap position-absolute top-0 start-0 w-100 h-100">
+        <iframe
+            class="hero-video-iframe"
+            src="https://www.youtube.com/embed/Xit3qabnhjI?autoplay=1&mute=1&loop=1&playlist=Xit3qabnhjI&controls=0&rel=0&showinfo=0&modestbranding=1&vq=hd1080"
+            title="NAUJAN TOURISM VIDEO"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen
+        ></iframe>
     </div>
 
     <div class="hero-overlay position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-center">
