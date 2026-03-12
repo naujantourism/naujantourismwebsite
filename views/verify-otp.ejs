@@ -1,0 +1,56 @@
+<%- include('partials/header') %>
+
+<section class="auth-wrapper container">
+    <div class="row justify-content-center w-100">
+        <div class="col-md-10 col-lg-7 col-xl-6">
+            <div class="auth-card">
+                <div class="text-center mb-4">
+                    <span class="badge rounded-pill px-3 py-2 mb-3" style="background: var(--accent-bg); color: var(--accent); font-weight: 600;">
+                        <i class="fas fa-shield-alt me-1"></i> Security Check
+                    </span>
+                    <h1 class="h4 fw-bold">Enter your login code</h1>
+                    <p class="small mb-0" style="color: var(--text-secondary);">
+                        We sent a 5‑character code to <strong><%= email %></strong>.
+                    </p>
+                </div>
+
+                <% if (typeof error !== 'undefined' && error) { %>
+                    <div class="alert alert-danger py-2" role="alert">
+                        <% if (error === 'invalid') { %>That code is invalid. Please try again.<% } %>
+                        <% if (error === 'expired') { %>That code has expired. Please log in again to request a new code.<% } %>
+                        <% if (error === 'locked') { %>Too many attempts. Please log in again to request a new code.<% } %>
+                        <% if (error === 'error') { %>Something went wrong. Please try again.<% } %>
+                    </div>
+                <% } %>
+
+                <form action="/verify-otp" method="post" autocomplete="one-time-code">
+                    <div class="mb-3">
+                        <label for="otp-code" class="form-label">Code</label>
+                        <input
+                            type="text"
+                            class="form-control text-uppercase"
+                            id="otp-code"
+                            name="code"
+                            inputmode="text"
+                            autocapitalize="characters"
+                            maxlength="5"
+                            minlength="5"
+                            required
+                            placeholder="ABCDE">
+                        <small class="text-muted">Tip: the code expires in 10 minutes.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Verify &amp; continue</button>
+                </form>
+
+                <p class="small text-center mt-4 mb-0" style="color: var(--text-secondary);">
+                    <a href="/login" class="text-decoration-none" style="color: var(--accent);">
+                        <i class="fas fa-arrow-left me-1"></i> Back to login
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<%- include('partials/footer') %>
+
