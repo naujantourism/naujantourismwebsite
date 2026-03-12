@@ -225,6 +225,13 @@ app.use(session({
     }
 }));
 
+function hasTrustedDeviceCookie(req) {
+    const raw = req && req.headers ? req.headers.cookie : '';
+    if (!raw || typeof raw !== 'string') return false;
+    // Cookie name is "nt_td"
+    return raw.split(';').some((part) => part.trim().startsWith('nt_td='));
+}
+
 app.use((req, res, next) => {
     res.locals.user = req.session && req.session.email
         ? { id: req.session.userId, email: req.session.email, role: req.session.role, name: req.session.name || req.session.email }
@@ -232,6 +239,7 @@ app.use((req, res, next) => {
     const { favorites, ratings } = getCurrentUserFavsAndRatings(req.session && req.session.userId);
     res.locals.userFavorites = favorites;
     res.locals.userRatings = ratings;
+    res.locals.hasTrustedDevice = hasTrustedDeviceCookie(req);
     next();
 });
 
@@ -2298,8 +2306,9 @@ app.get('/verify-email', async (req, res) => {
 });
 
 app.post('/logout', (req, res) => {
+    const forgetDevice = req.body && (req.body.forgetDevice === '1' || req.body.forgetDevice === 1 || req.body.forgetDevice === true || req.body.forgetDevice === 'true');
     req.session.destroy(() => {});
-    clearTrustedDeviceCookie(res);
+    if (forgetDevice) clearTrustedDeviceCookie(res);
     res.redirect('/');
 });
 
