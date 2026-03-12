@@ -122,6 +122,7 @@ const reportsRef = db.ref('/reports');
 const categoriesRef = db.ref('/categories');
 const loginOtpsRef = db.ref('/loginOtps');
 const trustedDevicesRef = db.ref('/trustedDevices');
+const rememberDevicesRef = db.ref('/remember_devices');
 
 // --- Production-safe sessions (store in Firebase RTDB) ---
 const sessionsRef = db.ref('/sessions');
@@ -406,89 +407,31 @@ If you did not try to log in, you can ignore this email.`,
     });
 }
 
-async function createTrustedDevice(uid) {
-    const deviceId = crypto.randomBytes(8).toString('hex'); // selector
-    const validator = crypto.randomBytes(32).toString('hex'); // secret
+async function createRememberDevice(uid, req) {
+    const deviceId = crypto.randomBytes(16).toString('hex');
     const now = Date.now();
     const expiresAt = now + TRUSTED_DEVICE_TTL_MS;
-    const validatorHash = await bcrypt.hash(validator, SALT_ROUNDS);
-    await trustedDevicesRef.child(uid).child(deviceId).set({
-        validatorHash,
+    const ua = req && req.headers ? req.headers['user-agent'] : null;
+    await rememberDevicesRef.child(uid).child(deviceId).set({
         createdAt: now,
-        lastUsedAt: now,
-        expiresAt
+        expiresAt,
+        userAgent: ua || null
     });
-    return `${deviceId}.${validator}`;
-}
-
-function base64UrlEncode(s) {
-    return Buffer.from(String(s), 'utf8')
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/g, '');
-}
-
-function base64UrlDecodeToString(s) {
-    const str = String(s || '');
-    const padLen = (4 - (str.length % 4)) % 4;
-    const padded = str.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat(padLen);
-    return Buffer.from(padded, 'base64').toString('utf8');
-}
-
-function signTrustedPayload(payload) {
-    const secret = process.env.SESSION_SECRET || 'naujan-tourism-dev-secret-change-in-production';
-    return crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 40);
-}
-
-function createTrustedDeviceTokenV2(uid) {
-    const now = Date.now();
-    const expiresAt = now + TRUSTED_DEVICE_TTL_MS;
-    const nonce = crypto.randomBytes(8).toString('hex');
-    const payload = base64UrlEncode(`${uid}|${expiresAt}|${nonce}`);
-    const sig = signTrustedPayload(payload);
-    return `v2.${payload}.${sig}`;
-}
-
-function isTrustedDeviceTokenV2(uid, token) {
-    if (!token || typeof token !== 'string') return false;
-    if (!token.startsWith('v2.')) return false;
-    const parts = token.split('.');
-    if (parts.length !== 3) return false;
-    const payload = parts[1];
-    const sig = parts[2];
-    if (!payload || !sig) return false;
-    if (signTrustedPayload(payload) !== sig) return false;
-    try {
-        const decoded = base64UrlDecodeToString(payload);
-        const [tokenUid, expRaw] = decoded.split('|');
-        const exp = Number(expRaw);
-        if (!tokenUid || tokenUid !== uid) return false;
-        if (!Number.isFinite(exp) || exp <= Date.now()) return false;
-        return true;
-    } catch {
-        return false;
-    }
+    return deviceId;
 }
 
 async function isTrustedDevice(uid, req) {
-    const raw = getCookie(req, 'nt_td');
-    if (!raw || typeof raw !== 'string') return false;
-
-    // v2 token: self-contained, signed (works even if DB writes are blocked)
-    if (isTrustedDeviceTokenV2(uid, raw)) return true;
-
-    const [deviceId, validator] = raw.split('.');
-    if (!deviceId || !validator) return false;
+    const deviceId = getCookie(req, 'nt_td');
+    if (!deviceId || typeof deviceId !== 'string') return false;
     try {
-        const snap = await trustedDevicesRef.child(uid).child(deviceId).once('value');
+        const snap = await rememberDevicesRef.child(uid).child(deviceId).once('value');
         const rec = snap.val();
         if (!rec || typeof rec !== 'object') return false;
-        if (!rec.expiresAt || typeof rec.expiresAt !== 'number' || rec.expiresAt <= Date.now()) return false;
-        if (!rec.validatorHash || typeof rec.validatorHash !== 'string') return false;
-        const ok = await bcrypt.compare(validator, rec.validatorHash);
-        if (!ok) return false;
-        trustedDevicesRef.child(uid).child(deviceId).update({ lastUsedAt: Date.now() }).catch(() => {});
+        if (!rec.expiresAt || typeof rec.expiresAt !== 'number' || rec.expiresAt <= Date.now()) {
+            // Expired or invalid, clean up
+            rememberDevicesRef.child(uid).child(deviceId).remove().catch(() => {});
+            return false;
+        }
         return true;
     } catch {
         return false;
@@ -2149,10 +2092,9 @@ app.post('/verify-otp', authLimiter, async (req, res) => {
         if (pending.rememberMe) req.session.cookie.maxAge = REMEMBER_ME_TTL_MS;
 
         if (pending.rememberDevice) {
-            // Prefer v2 signed token (no DB dependency). Still accept v1 tokens for backward compatibility.
-            const token = createTrustedDeviceTokenV2(pending.uid);
+            const deviceId = await createRememberDevice(pending.uid, req);
             const secure = isRequestSecure(req);
-            res.cookie('nt_td', token, {
+            res.cookie('nt_td', deviceId, {
                 path: '/',
                 httpOnly: true,
                 sameSite: 'lax',
@@ -2363,8 +2305,15 @@ app.get('/verify-email', async (req, res) => {
 
 app.post('/logout', (req, res) => {
     const forgetDevice = req.body && (req.body.forgetDevice === '1' || req.body.forgetDevice === 1 || req.body.forgetDevice === true || req.body.forgetDevice === 'true');
+    const uid = req.session && req.session.userId;
+    if (forgetDevice && uid) {
+        const deviceId = getCookie(req, 'nt_td');
+        if (deviceId) {
+            rememberDevicesRef.child(uid).child(deviceId).remove().catch(() => {});
+        }
+        clearTrustedDeviceCookie(res);
+    }
     req.session.destroy(() => {});
-    if (forgetDevice) clearTrustedDeviceCookie(res);
     res.redirect('/');
 });
 
